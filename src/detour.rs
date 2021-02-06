@@ -16,7 +16,7 @@ fn is_hello(data: &[u8]) -> bool {
 
 // default payload size of a fragmented tls record (NOT full size)
 // FIXME: if this is too small (around <150), it gets 'broken pipe'. why?
-const FRAG_SIZE: usize = 200;
+const FRAG_SIZE: usize = 300;
 
 // split a tls record into fragments.
 // if multiple tls records of same type are send, the server should
@@ -208,12 +208,11 @@ mod tests {
     use super::Detour;
 
     async fn connect(host: &str) {
+        let tls = native_tls::TlsConnector::new().unwrap();
+        let tls = TlsConnector::from(tls);
+
         let sock = TcpStream::connect((host, 443)).await.unwrap();
-        let sock = Detour::new(sock);
-    
-        let conn = native_tls::TlsConnector::new().unwrap();
-        let conn = TlsConnector::from(conn);
-        let sock = conn.connect(host, sock).await.unwrap();
+        let sock = tls.connect(host, Detour::new(sock)).await.unwrap();
     
         let (mut sender, connection) = Builder::new()
             .handshake::<_, Body>(sock)

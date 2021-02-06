@@ -7,3 +7,4 @@ extern crate tokio_native_tls;
 extern crate hyper;
 
 mod detour;
+mod client;
