@@ -8,71 +8,48 @@ use core::ops::{Deref, DerefMut};
 use core::pin::Pin;
 use core::task::{Context, Poll};
 
-// a magic that tells you if a tls record is client hello (2 comparisons!)
+// a magic that tells you if a tls record is client hello (3 comparisons!)
 fn is_hello(data: &[u8]) -> bool {
     // conent_type == handshake && handshake_type == client_hello
-    data[0] == 0x16 && data[5] == 0x01
+    data.len() > 5 && data[0] == 0x16 && data[5] == 0x01
 }
 
-// default payload size of a fragmented tls record (NOT full size)
-// FIXME: if this is too small (around <150), it gets 'broken pipe'. why?
-const FRAG_SIZE: usize = 300;
-
-// split a tls record into fragments.
+// split a tls record half into fragments.
 // if multiple tls records of same type are send, the server should
 // identify them as 'fragmented' and reassemble them up to a single record.
 //
 // see [https://tools.ietf.org/html/rfc8446#section-5] for more detail.
-fn fragmentate(data: &[u8]) -> impl Iterator<Item = Vec<u8>> + '_ {
+fn fragmentate(data: &[u8]) -> (Vec<u8>, Vec<u8>) {
     // a header of an TLSPlaintext is 5 bytes length. its content are
     // content type(1 byte), protocol version(2 bytes), fragment length(2 bytes)
+    assert!(data.len() > 5);
 
+    // split the payload into half
+    let (left, right) = data.split_at(5 + (data.len() - 5) / 2);
+    
     // we'll keep record type and protocol version as same as original,
     // but the payload length will be changed to the chunk's size.
-    let header = [data[0], data[1], data[2]];
 
-    // chunk only payload, not header
-    data[5..].chunks(FRAG_SIZE).map(move |chunk| {
-        let mut frag = Vec::with_capacity(FRAG_SIZE + 5);
+    // left contains header; payload length is len - 5
+    let size_bytes = ((left.len() - 5) as u16).to_be_bytes();
+    let mut first = left.to_vec();
+    first[3] = size_bytes[0];
+    first[4] = size_bytes[1];
 
-        let bytes = (chunk.len() as u16).to_be_bytes();
-        frag.extend_from_slice(&header); // copy header
-        frag.extend_from_slice(&bytes);  // copy len
-        frag.extend_from_slice(chunk);   // copy payload
+    let size_bytes = (right.len() as u16).to_be_bytes();
+    let mut second = vec![
+        data[0],
+        data[1], data[2], 
+        size_bytes[0], size_bytes[1]
+    ];
 
-        frag
-    })
+    second.extend_from_slice(right);
+
+    (first, second)
 }
 
-// a handy helper struct holding fragments to be send
-struct Fragment {
-    frags: Vec<Vec<u8>>, // array of fragments
-    index: usize, // index of fragment to be send right now
-}
-
-impl Fragment {
-    fn from_whole(data: &[u8]) -> Self {
-        Self {
-            frags: fragmentate(data).collect(),
-            index: 0,
-        }
-    }
-
-    // is Option absolutely needed?
-    fn data(&self) -> Option<&[u8]> {
-        if self.index < self.frags.len() {
-            Some(&self.frags[self.index])
-        } else {
-            None
-        }
-    }
-
-    // i won't impl Iterator since we can't return &'_ in a trait
-    fn next(&mut self) -> bool {
-        self.index += 1;
-        self.index < self.frags.len()
-    }
-}
+// first, second, send_first
+type Fragment = (Vec<u8>, Vec<u8>, bool);
 
 enum DetourState {
     Normal, // not sending a fragment; passthrough
@@ -146,25 +123,34 @@ impl<T: AsyncWrite> AsyncWrite for Detour<T> {
             DetourState::Normal => {
                 // save fragments into buffer and set the state to Sending
                 // the fragments will be send in the next poll
+                let (first, second) = fragmentate(buf);
+
                 ref_self.state = DetourState::Sending(
-                    Fragment::from_whole(buf), 0
+                    (first, second, true), 0
                 );
 
                 Poll::Pending
             },
-            DetourState::Sending(frag, size) => {
+            DetourState::Sending((first, second, send_first), size) => {
                 // both ref_self and ref_self.sock won't move so it's safe to pin
                 let sock = unsafe { Pin::new_unchecked(&mut ref_self.sock) };
 
-                match sock.poll_write(cx, frag.data().unwrap()) {
+                let to_send = if *send_first {
+                    first
+                } else {
+                    second
+                };
+
+                match sock.poll_write(cx, to_send) {
                     Poll::Pending => { 
                         Poll::Pending
                     },
                     Poll::Ready(Ok(n)) => {
                         *size += n;
 
-                        if frag.next() {
+                        if *send_first {
                             // there are fragments left to be send
+                            *send_first = false;
                             Poll::Pending
                         } else {
                             // all fragments are send; go back to Normal
