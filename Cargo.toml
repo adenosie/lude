@@ -9,7 +9,5 @@ edition = "2018"
 [dependencies]
 tokio = { version = "1", features = ["rt", "net", "macros"] }
 tokio-native-tls = "0.3"
-tokio-rustls = "0.22"
-webpki-roots = "0.21"
 
 hyper = { version = "0.14", features = ["client", "http1", "http2"] }
