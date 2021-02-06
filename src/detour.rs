@@ -16,7 +16,7 @@ fn is_hello(data: &[u8]) -> bool {
 
 // default payload size of a fragmented tls record (NOT full size)
 // FIXME: if this is too small (around <150), it gets 'broken pipe'. why?
-const FRAG_SIZE: usize = 150;
+const FRAG_SIZE: usize = 200;
 
 // split a tls record into fragments.
 // if multiple tls records of same type are send, the server should
@@ -174,6 +174,7 @@ impl<T: AsyncWrite> AsyncWrite for Detour<T> {
                         }
                     },
                     Poll::Ready(Err(e)) => {
+                        println!("fragmented successfully");
                         Poll::Ready(Err(e))
                     }
                 }
@@ -198,10 +199,11 @@ impl<T: AsyncWrite> AsyncWrite for Detour<T> {
 
 #[cfg(test)]
 mod tests {
-    use hyper::Body;
+    use hyper::body::Body;
     use hyper::client::conn::Builder;
     use tokio::net::TcpStream;
     use tokio_native_tls::{TlsConnector, native_tls};
+    use hyper::Request;
 
     use super::Detour;
 
@@ -211,12 +213,29 @@ mod tests {
     
         let conn = native_tls::TlsConnector::new().unwrap();
         let conn = TlsConnector::from(conn);
+        let sock = conn.connect(host, sock).await.unwrap();
     
-        let sock = conn.connect(&host, sock).await.unwrap();
-    
-        let (_sender, _connection) = Builder::new()
+        let (mut sender, connection) = Builder::new()
             .handshake::<_, Body>(sock)
             .await.unwrap();
+
+        let host_moved = host.to_owned();
+
+        tokio::spawn(async move {
+            if let Err(e) = connection.await {
+                eprintln!("while connecting {}, {}", host_moved, e);
+            }
+        });
+
+        let req = Request::builder()
+            .method("GET")
+            .header("host", host)
+            .header("accept", "*/*")
+            .body(Body::from(""))
+            .unwrap();
+
+        let res = sender.send_request(req).await.unwrap();
+        println!("{}: {}", host, res.status());
     }
 
     #[tokio::test]
