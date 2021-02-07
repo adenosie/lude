@@ -1,13 +1,27 @@
 use std::future::Future;
 use std::error::Error;
+use std::fmt;
 use tokio::task::JoinHandle;
 use tokio::net::TcpStream;
 use tokio_native_tls::{TlsConnector, native_tls};
-use hyper::http;
-use hyper::{Body, Request, Response};
+use hyper::body::{Bytes, HttpBody};
+use hyper::{Body, Request, Response, StatusCode};
 use hyper::client::conn::{Builder, SendRequest};
 
 use crate::detour::Detour;
+
+#[derive(Debug, Clone)]
+pub struct ResponseError(StatusCode);
+
+impl fmt::Display for ResponseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Error for ResponseError {
+
+}
 
 struct Client {
     host: String,
@@ -51,15 +65,26 @@ impl Client {
         self.sender.send_request(req)
     }
 
-    pub fn get(&mut self, path: &str)
-        -> http::Result<impl Future<Output = hyper::Result<Response<Body>>>> {
-        let req = Request::builder()
-            .method("GET")
-            .uri(path)
-            .header("Host", &self.host)
-            .body(Body::from(""))?;
+    // send a GET and return only body. head is ignored
+    pub fn get_bytes(&mut self, path: &str)
+        -> impl Future<Output = Result<Vec<u8>, Box<dyn Error>>> + '_ {
+        let path = path.to_owned();
 
-        Ok(self.send_request(req))
+        async move {
+            let req = Request::builder()
+                .method("GET")
+                .uri(path)
+                .header("Host", &self.host)
+                .header("Accept", "*/*")
+                .body(Body::from(""))?;
+
+            let mut res = self.send_request(req).await?;
+            if !res.status().is_server_error() && !res.status().is_client_error() {
+                Ok(res.into_body().data().await.unwrap_or(Ok(Bytes::new()))?.to_vec())
+            } else {
+                Err(ResponseError(res.status()).into())
+            }
+        }
     }
 }
 
@@ -70,11 +95,7 @@ mod tests {
     use std::error::Error;
     async fn conn_client(host: &str) -> Result<(), Box<dyn Error>> {
         let mut client = Client::new(host).await?;
-        let res = client.get("/")?.await?;
-
-        let status = res.status();
-        println!("{}: {}", host, status);
-        assert!(!status.is_client_error());
+        let res = client.get_bytes("/").await?;
 
         Ok(())
     }
