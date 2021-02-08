@@ -66,6 +66,7 @@ impl Client {
     }
 
     // send a GET and return only body. head is ignored
+    // does this absolutely needed?
     pub fn get_bytes(&mut self, path: &str)
         -> impl Future<Output = Result<Vec<u8>, Box<dyn Error>>> + '_ {
         let path = path.to_owned();
