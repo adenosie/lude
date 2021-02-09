@@ -48,12 +48,12 @@ fn fragmentate(data: &[u8]) -> (Vec<u8>, Vec<u8>) {
     (first, second)
 }
 
-// first, second, send_first
-type Fragment = (Vec<u8>, Vec<u8>, bool);
-
 enum DetourState {
-    Normal, // not sending a fragment; passthrough
-    Sending(Fragment, usize), // currently sending a fragment
+    // not sending a fragment; passthrough
+    Normal,
+    // currently sending fragments
+    SendFirst(Vec<u8>, Vec<u8>), // first, second
+    SendSecond(Vec<u8>, usize),  // second, first_written
 }
 
 // a thin wrapper to bypass DPI(deep packet inspectation)
@@ -116,53 +116,40 @@ impl<T: AsyncWrite> AsyncWrite for Detour<T> {
         }
 
         // consume the pin out; we must not move self and its member from now on
-        let ref_self = unsafe { self.get_unchecked_mut() };
+        let _self = unsafe { self.get_unchecked_mut() };
 
         match &mut ref_self.state {
             // this call is the first time to be polled to send this buf
             DetourState::Normal => {
-                // save fragments into buffer and set the state to Sending
                 // the fragments will be send in the next poll
                 let (first, second) = fragmentate(buf);
-
-                ref_self.state = DetourState::Sending(
-                    (first, second, true), 0
-                );
-
+                _self.state = DetourState::SendFirst(first, second);
                 Poll::Pending
             },
-            DetourState::Sending((first, second, send_first), size) => {
+            DetourState::SendFirst(first, second) => {
                 // both ref_self and ref_self.sock won't move so it's safe to pin
                 let sock = unsafe { Pin::new_unchecked(&mut ref_self.sock) };
 
-                let to_send = if *send_first {
-                    first
-                } else {
-                    second
-                };
-
-                match sock.poll_write(cx, to_send) {
-                    Poll::Pending => { 
+                match sock.poll_write(cx, first) {
+                    Poll::Ready(Ok(n)) => {
+                        // the second fragment is left
+                        _self.state = DetourState::SendSecond(second, n);
                         Poll::Pending
                     },
-                    Poll::Ready(Ok(n)) => {
-                        *size += n;
+                    _ => _
+                }
+            }
+            DetourState::Sending(second, written) => {
+                let sock = unsafe { Pin::new_unchecked(&mut ref_self.sock) };
 
-                        if *send_first {
-                            // there are fragments left to be send
-                            *send_first = false;
-                            Poll::Pending
-                        } else {
-                            // all fragments are send; go back to Normal
-                            let res = *size;
-                            ref_self.state = DetourState::Normal;
-                            Poll::Ready(Ok(res))
-                        }
+                match sock.poll_write(cx, second) {
+                    Poll::Ready(Ok(n)) => {
+                        // all fragments are send; go back to Normal
+                        let res = *written + n;
+                        _self.state = DetourState::Normal;
+                        Poll::Ready(Ok(res))
                     },
-                    Poll::Ready(Err(e)) => {
-                        println!("fragmented successfully");
-                        Poll::Ready(Err(e))
-                    }
+                    _ => _
                 }
             },
         }
