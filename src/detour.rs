@@ -118,7 +118,7 @@ impl<T: AsyncWrite> AsyncWrite for Detour<T> {
         // consume the pin out; we must not move self and its member from now on
         let _self = unsafe { self.get_unchecked_mut() };
 
-        match &mut ref_self.state {
+        match &_self.state {
             // this call is the first time to be polled to send this buf
             DetourState::Normal => {
                 // the fragments will be send in the next poll
@@ -128,28 +128,30 @@ impl<T: AsyncWrite> AsyncWrite for Detour<T> {
             },
             DetourState::SendFirst(first, second) => {
                 // both ref_self and ref_self.sock won't move so it's safe to pin
-                let sock = unsafe { Pin::new_unchecked(&mut ref_self.sock) };
+                let sock = unsafe { Pin::new_unchecked(&mut _self.sock) };
 
                 match sock.poll_write(cx, first) {
+                    // the second fragment is left
                     Poll::Ready(Ok(n)) => {
-                        // the second fragment is left
+                        // can't move out of second so it's the only option...
+                        let second = second.clone();
                         _self.state = DetourState::SendSecond(second, n);
                         Poll::Pending
                     },
-                    _ => _
+                    others => others
                 }
             }
-            DetourState::Sending(second, written) => {
-                let sock = unsafe { Pin::new_unchecked(&mut ref_self.sock) };
+            DetourState::SendSecond(second, written) => {
+                let sock = unsafe { Pin::new_unchecked(&mut _self.sock) };
 
-                match sock.poll_write(cx, second) {
+                match sock.poll_write(cx, &second) {
+                    // all fragments are send; go back to Normal
                     Poll::Ready(Ok(n)) => {
-                        // all fragments are send; go back to Normal
-                        let res = *written + n;
+                        let res = written + n;
                         _self.state = DetourState::Normal;
                         Poll::Ready(Ok(res))
                     },
-                    _ => _
+                    others => others
                 }
             },
         }
