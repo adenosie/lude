@@ -8,3 +8,9 @@ extern crate hyper;
 
 mod detour;
 mod client;
+mod backend;
+
+pub use detour::Detour;
+pub use client::Client;
+
+pub use backend::{ehentai};

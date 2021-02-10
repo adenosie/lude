@@ -23,7 +23,7 @@ impl Error for ResponseError {
 
 }
 
-struct Client {
+pub struct Client {
     host: String,
     sender: SendRequest<Body>,
     handle: JoinHandle<()>,
@@ -79,7 +79,7 @@ impl Client {
                 .header("Accept", "*/*")
                 .body(Body::from(""))?;
 
-            let mut res = self.send_request(req).await?;
+            let res = self.send_request(req).await?;
             if !res.status().is_server_error() && !res.status().is_client_error() {
                 Ok(res.into_body().data().await.unwrap_or(Ok(Bytes::new()))?.to_vec())
             } else {
