@@ -1,13 +1,19 @@
 use std::fmt;
 use std::str::FromStr;
+use std::error::Error;
 use std::ops::{Index, IndexMut};
 
+#[derive(Debug)]
 pub struct EhParseTagError();
 
 impl fmt::Display for EhParseTagError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Tag with wrong format was given")
     }
+}
+
+impl Error for EhParseTagError {
+
 }
 
 #[derive(Clone, Copy)]
