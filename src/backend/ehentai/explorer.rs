@@ -3,7 +3,7 @@ use std::ops::{Index, IndexMut};
 use std::str::FromStr;
 use std::error::Error;
 use core::future::Future;
-use hyper::{Request, Response};
+use hyper::{Body, Request, Response};
 use crate::client::Client;
 
 fn percent_encode(from: &str) -> String {
@@ -46,10 +46,17 @@ impl EhExplorer {
         let query = percent_encode(query);
 
         async move {
-            let vec = self.client
-                .get_bytes(&format!("/?f_search={}", query)).await?;
+            let req = Request::builder()
+                .method("GET")
+                .header("Host", "e-hentai.org")
+                .uri(&format!("/?f_search={}", query))
+                .header("Accept", "text/html")
+                .body(Body::empty())?;
 
-            Ok(String::from_utf8(vec)?)
+            let res = self.client.send_request(req).await?;
+            let bytes = hyper::body::to_bytes(res.into_body()).await?;
+
+            Ok(String::from_utf8(bytes.to_vec())?)
         }
     }
 }
@@ -63,7 +70,7 @@ mod tests {
         let mut explorer = EhExplorer::new().await.unwrap();
 
         let html = explorer.search("language:korean").await.unwrap();
-        println!("{}", html.len());
+        println!("{}", html);
     }
 
     /*

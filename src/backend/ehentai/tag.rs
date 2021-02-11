@@ -10,6 +10,7 @@ impl fmt::Display for EhParseTagError {
     }
 }
 
+#[derive(Clone, Copy)]
 pub enum EhTagKind {
     Language,
     Group,
@@ -26,14 +27,16 @@ impl FromStr for EhTagKind {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "language" => EhTagKind::Language,
-            "group" => EhTagKind::Group,
-            "parody" => EhTagKind::Parody,
-            "character" => EhTagKind::Character,
-            "artist" => EhTagKind::Artist,
-            "male" => EhTagKind::Male,
-            "female" => EhTagKind::Female,
-            "misc" => EhTagKind::Misc,
+            // alternates according to [https://ehwiki.org/wiki/Namespace]
+            "language" | "lang" => Ok(EhTagKind::Language),
+            "group" | "creator" | "circle" | "g" => Ok(EhTagKind::Group),
+            "parody" | "series" | "p" => Ok(EhTagKind::Parody),
+            "character" | "char" | "c" => Ok(EhTagKind::Character),
+            "artist" | "a" => Ok(EhTagKind::Artist),
+            "male" | "m" => Ok(EhTagKind::Male),
+            "female" | "f" => Ok(EhTagKind::Female),
+            "misc" => Ok(EhTagKind::Misc),
+            _ => Err(EhParseTagError())
         }
     }
 }
@@ -53,7 +56,9 @@ impl fmt::Display for EhTagKind {
     }
 }
 
-impl FromStr for (EhTagKind, String) {
+pub struct EhTag(EhTagKind, String);
+
+impl FromStr for EhTag {
     type Err = EhParseTagError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -64,21 +69,21 @@ impl FromStr for (EhTagKind, String) {
                 let category = s[..pos].parse()?;
                 let tag = String::from(&s[(pos + 1)..]);
 
-                (category, tag)
+                Ok(EhTag(category, tag))
             },
             None => Err(EhParseTagError())
         }
     }
 }
 
-impl fmt::Display for (EhTagKind, String) {
+impl fmt::Display for EhTag {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}:{}", self.0, self.1)
     }
 }
 
-pub struct EhTags {
-    // all would be sorted alphabetically
+pub struct EhTagMap {
+    // all is (probably) sorted alphabetically
     // (because the webpage gives tags so)
     language: Vec<String>,
     group: Vec<String>,
@@ -90,7 +95,17 @@ pub struct EhTags {
     misc: Vec<String>,
 }
 
-impl Index<EhTagKind> for EhTags {
+impl EhTagMap {
+    pub fn add(&mut self, tag: &EhTag) {
+        self[tag.0].push(tag.1.clone());
+    }
+
+    pub fn has(&mut self, tag: &EhTag) -> bool {
+        self[tag.0].iter().any(|x| x == &tag.1)
+    }
+}
+
+impl Index<EhTagKind> for EhTagMap {
     type Output = Vec<String>;
 
     fn index(&self, category: EhTagKind) -> &Self::Output {
@@ -107,10 +122,8 @@ impl Index<EhTagKind> for EhTags {
     }
 }
 
-impl IndexMut<EhTagKind> for EhTags {
-    type Output = Vec<String>;
-
-    fn index(&mut self, category: EhTagKind) -> &mut Self::Output {
+impl IndexMut<EhTagKind> for EhTagMap {
+    fn index_mut(&mut self, category: EhTagKind) -> &mut Self::Output {
         match category {
             EhTagKind::Language => &mut self.language,
             EhTagKind::Group => &mut self.group,

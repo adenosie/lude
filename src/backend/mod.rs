@@ -1,3 +1,1 @@
-mod ehentai;
-
-pub use ehentai;
+pub mod ehentai;

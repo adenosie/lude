@@ -1,4 +1,4 @@
-use super::tag::EhTags;
+use super::tag::EhTagMap;
 
 pub enum EhArticleKind {
     Doujinshi,
@@ -10,27 +10,18 @@ pub enum EhArticleKind {
     ImageSet,
     Cosplay,
     AsianPorn,
-    Misc
-}
-
-pub struct EhPendingArticle {
-    // path to article after domain name
-    // (e.g. "/g/1556174/cfe385099d/")
-    path: String, 
-
-    kind: EhArticleKind,
-    title: String,
-    uploader: String,
-    page_paths: Vec<String>,
-    brief_tags: EhTags
+    Misc,
+    Private
 }
 
 pub struct EhArticle {
+    path: String,
+
     kind: EhArticleKind,
     title: String,
     original_title: String,
     uploader: String,
-    tags: EhTags,
+    tags: EhTagMap,
 
     // ... TODO
 }
