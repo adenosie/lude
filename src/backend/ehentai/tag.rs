@@ -49,15 +49,29 @@ impl FromStr for EhTagKind {
 
 impl fmt::Display for EhTagKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            EhTagKind::Language => write!(f, "language"),
-            EhTagKind::Group => write!(f, "group"),
-            EhTagKind::Parody => write!(f, "parody"),
-            EhTagKind::Character => write!(f, "character"),
-            EhTagKind::Artist => write!(f, "artist"),
-            EhTagKind::Male => write!(f, "male"),
-            EhTagKind::Female => write!(f, "female"),
-            EhTagKind::Misc => write!(f, "misc")
+        if f.alternate() {
+            // give shorter names
+            match *self {
+                EhTagKind::Language => write!(f, "lang"),
+                EhTagKind::Group => write!(f, "g"),
+                EhTagKind::Parody => write!(f, "p"),
+                EhTagKind::Character => write!(f, "c"),
+                EhTagKind::Artist => write!(f, "a"),
+                EhTagKind::Male => write!(f, "m"),
+                EhTagKind::Female => write!(f, "f"),
+                EhTagKind::Misc => write!(f, "misc")
+            }
+        } else {
+            match *self {
+                EhTagKind::Language => write!(f, "language"),
+                EhTagKind::Group => write!(f, "group"),
+                EhTagKind::Parody => write!(f, "parody"),
+                EhTagKind::Character => write!(f, "character"),
+                EhTagKind::Artist => write!(f, "artist"),
+                EhTagKind::Male => write!(f, "male"),
+                EhTagKind::Female => write!(f, "female"),
+                EhTagKind::Misc => write!(f, "misc")
+            }
         }
     }
 }
@@ -102,8 +116,8 @@ pub struct EhTagMap {
 }
 
 impl EhTagMap {
-    pub fn add(&mut self, tag: &EhTag) {
-        self[tag.0].push(tag.1.clone());
+    pub fn add(&mut self, tag: EhTag) {
+        self[tag.0].push(tag.1);
     }
 
     pub fn has(&mut self, tag: &EhTag) -> bool {

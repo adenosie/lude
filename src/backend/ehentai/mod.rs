@@ -1,5 +1,6 @@
 mod tag;
 mod article;
+mod parser;
 mod explorer;
 
 pub use tag::{EhParseTagError, EhTagKind, EhTag, EhTagMap};
