@@ -51,6 +51,24 @@ impl FromStr for EhArticleKind {
     }
 }
 
+impl fmt::Display for EhArticleKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            EhArticleKind::Doujinshi => write!(f, "Doujinshi"),
+            EhArticleKind::Manga => write!(f, "Manga"),
+            EhArticleKind::ArtistCG => write!(f, "Artist CG"),
+            EhArticleKind::GameCG => write!(f, "Game CG"),
+            EhArticleKind::Western => write!(f, "Western"),
+            EhArticleKind::NonH => write!(f, "Non-H"),
+            EhArticleKind::ImageSet => write!(f, "Image Set"),
+            EhArticleKind::Cosplay => write!(f, "Cosplay"),
+            EhArticleKind::AsianPorn => write!(f, "Asian Porn"),
+            EhArticleKind::Misc => write!(f, "Misc"),
+            EhArticleKind::Private => write!(f, "Private"),
+        }
+    }
+}
+
 pub struct EhPendingArticle {
     pub(crate) kind: EhArticleKind,
     pub(crate) thumb: String,

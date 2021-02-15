@@ -87,13 +87,14 @@ mod tests {
         let mut explorer = EhExplorer::new().await.unwrap();
 
         let list = explorer.search("language:korean").await.unwrap();
-        let articles = list.into_iter().map(|pending| explorer.article(pending)).collect();
 
-        for article in articles {
+        for pending in list.into_iter() {
+            let article = explorer.article(pending).await.unwrap();
+
             println!("{}", article.original_title);
             println!("{}", article.kind);
 
-            for tag in article.tags[EhTagKind::Female] {
+            for tag in &article.tags[EhTagKind::Female] {
                 print!("{} ", tag);
             }
 
