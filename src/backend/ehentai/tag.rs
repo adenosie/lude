@@ -1,5 +1,6 @@
 use std::fmt;
 use std::str::FromStr;
+use std::iter::{FromIterator, IntoIterator};
 use std::error::Error;
 use std::ops::{Index, IndexMut};
 
@@ -41,7 +42,7 @@ impl FromStr for EhTagKind {
             "artist" | "a" => Ok(EhTagKind::Artist),
             "male" | "m" => Ok(EhTagKind::Male),
             "female" | "f" => Ok(EhTagKind::Female),
-            "misc" => Ok(EhTagKind::Misc),
+            "misc" | "" => Ok(EhTagKind::Misc),
             _ => Err(EhParseTagError())
         }
     }
@@ -102,6 +103,7 @@ impl fmt::Display for EhTag {
     }
 }
 
+#[derive(Default)]
 pub struct EhTagMap {
     // all is (probably) sorted alphabetically
     // (because the webpage gives tags so)
@@ -116,6 +118,10 @@ pub struct EhTagMap {
 }
 
 impl EhTagMap {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     pub fn add(&mut self, tag: EhTag) {
         self[tag.0].push(tag.1);
     }
@@ -154,5 +160,17 @@ impl IndexMut<EhTagKind> for EhTagMap {
             EhTagKind::Female => &mut self.female,
             EhTagKind::Misc => &mut self.misc,
         }
+    }
+}
+
+impl FromIterator<EhTag> for EhTagMap {
+    fn from_iter<I: IntoIterator<Item = EhTag>>(iter: I) -> Self {
+        let mut tags = EhTagMap::new();
+        
+        for tag in iter {
+            tags.add(tag);
+        }
+
+        tags
     }
 }

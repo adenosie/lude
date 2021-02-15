@@ -54,22 +54,32 @@ impl FromStr for EhArticleKind {
 pub struct EhPendingArticle {
     pub(crate) kind: EhArticleKind,
     pub(crate) thumb: String,
-    pub(crate) date: String,
+    pub(crate) posted: String,
     pub(crate) path: String,
     pub(crate) title: String,
-    pub(crate) tags: Vec<String>,
+    pub(crate) tags: EhTagMap,
     pub(crate) uploader: String,
-    pub(crate) pages: usize,
+    pub(crate) length: usize,
 }
 
 pub struct EhArticle {
-    path: String,
+    pub(crate) title: String,
+    pub(crate) original_title: String,
 
-    kind: EhArticleKind,
-    title: String,
-    original_title: String,
-    uploader: String,
-    tags: EhTagMap,
+    pub(crate) kind: EhArticleKind,
+    pub(crate) uploader: String,
+    pub(crate) posted: String,
+    pub(crate) parent: String,
+    pub(crate) visible: bool, // what is this for?
+    pub(crate) language: String,
+    pub(crate) translated: bool,
+    pub(crate) file_size: String,
+    pub(crate) length: usize,
+    pub(crate) favorited: usize,
+    pub(crate) rating_count: usize,
+    pub(crate) rating: f64,
 
-    // ... TODO
+    pub(crate) tags: EhTagMap,
+
+    pub(crate) images: Vec<String>,
 }

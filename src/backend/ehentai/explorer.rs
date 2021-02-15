@@ -3,6 +3,7 @@ use std::future::Future;
 
 use crate::client::Client;
 use super::article::{EhArticle, EhArticleKind, EhPendingArticle};
+use super::tag::{EhTagMap, EhTagKind};
 use super::parser;
 
 fn percent_encode(from: &str) -> String {
@@ -50,15 +51,31 @@ impl EhExplorer {
         }
     }
 
-    // pub fn article(&mut self, path: &str)
-    //     -> impl Future<Output = Result<EhArticle, Box<dyn Error>> + '_ {
-    //     let path = path.to_owned();
+    pub fn article(&mut self, pending: EhPendingArticle)
+        -> impl Future<Output = Result<EhArticle, Box<dyn Error>>> + '_ {
+        // one page shows 40 images at max
+        let page_len: usize = (pending.length - 1) / 40 + 1;
 
-    //     async move {
-    //         let doc = self.client.query_html(&path).await?;
-    //         parser::parse_article(&doc)
-    //     }
-    // }
+        async move {
+            let doc = self.client.query_html(&pending.path).await?;
+            let mut article = parser::parse_article_info(&doc)?;
+
+            let mut vec = parser::parse_image_list(&doc)?;
+            article.images.append(&mut vec);
+
+            // TODO: this could be done async
+            for i in 1..page_len {
+                let doc = self.client.query_html(
+                    &format!("{}?p={}", pending.path, i)
+                ).await?;
+
+                let mut vec = parser::parse_image_list(&doc)?;
+                article.images.append(&mut vec);
+            }
+
+            Ok(article)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -70,8 +87,17 @@ mod tests {
         let mut explorer = EhExplorer::new().await.unwrap();
 
         let list = explorer.search("language:korean").await.unwrap();
-        for pending in list {
-            println!("{}: {}", pending.path, pending.title);
+        let articles = list.into_iter().map(|pending| explorer.article(pending)).collect();
+
+        for article in articles {
+            println!("{}", article.original_title);
+            println!("{}", article.kind);
+
+            for tag in article.tags[EhTagKind::Female] {
+                print!("{} ", tag);
+            }
+
+            println!("");
         }
     }
 
