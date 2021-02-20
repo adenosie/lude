@@ -89,6 +89,7 @@ mod tests {
         let list = explorer.search("language:korean").await.unwrap();
 
         for pending in list.into_iter() {
+            println!("{}", pending.title);
             let article = explorer.article(pending).await.unwrap();
 
             println!("{}", article.original_title);

@@ -19,6 +19,7 @@ impl Error for EhParseTagError {
 
 #[derive(Clone, Copy)]
 pub enum EhTagKind {
+    Reclass,
     Language,
     Group,
     Parody,
@@ -26,7 +27,7 @@ pub enum EhTagKind {
     Artist,
     Male,
     Female,
-    Misc
+    Misc,
 }
 
 impl FromStr for EhTagKind {
@@ -35,6 +36,7 @@ impl FromStr for EhTagKind {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             // alternates according to [https://ehwiki.org/wiki/Namespace]
+            "reclass" | "r" => Ok(EhTagKind::Reclass),
             "language" | "lang" => Ok(EhTagKind::Language),
             "group" | "creator" | "circle" | "g" => Ok(EhTagKind::Group),
             "parody" | "series" | "p" => Ok(EhTagKind::Parody),
@@ -53,6 +55,7 @@ impl fmt::Display for EhTagKind {
         if f.alternate() {
             // give shorter names
             match *self {
+                EhTagKind::Reclass => write!(f, "r"),
                 EhTagKind::Language => write!(f, "lang"),
                 EhTagKind::Group => write!(f, "g"),
                 EhTagKind::Parody => write!(f, "p"),
@@ -64,6 +67,7 @@ impl fmt::Display for EhTagKind {
             }
         } else {
             match *self {
+                EhTagKind::Reclass => write!(f, "reclass"),
                 EhTagKind::Language => write!(f, "language"),
                 EhTagKind::Group => write!(f, "group"),
                 EhTagKind::Parody => write!(f, "parody"),
@@ -114,6 +118,7 @@ pub struct EhTagMap {
     artist: Vec<String>,
     male: Vec<String>,
     female: Vec<String>,
+    reclass: Vec<String>,
     misc: Vec<String>,
 }
 
@@ -136,6 +141,7 @@ impl Index<EhTagKind> for EhTagMap {
 
     fn index(&self, category: EhTagKind) -> &Self::Output {
         match category {
+            EhTagKind::Reclass => &self.reclass,
             EhTagKind::Language => &self.language,
             EhTagKind::Group => &self.group,
             EhTagKind::Parody => &self.parody,
@@ -151,6 +157,7 @@ impl Index<EhTagKind> for EhTagMap {
 impl IndexMut<EhTagKind> for EhTagMap {
     fn index_mut(&mut self, category: EhTagKind) -> &mut Self::Output {
         match category {
+            EhTagKind::Reclass => &mut self.reclass,
             EhTagKind::Language => &mut self.language,
             EhTagKind::Group => &mut self.group,
             EhTagKind::Parody => &mut self.parody,

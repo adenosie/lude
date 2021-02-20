@@ -128,10 +128,13 @@ pub fn parse_article_info(doc: &Document)
         (title, orig)
     };
 
+    // TODO: parse thumbnail (though it's identical with pending article's thumbnail)
+
     let kind = doc
         .find(Attr("id", "gdc"))
         .nth(0).unwrap()
         .first_child().unwrap()
+        .first_child().unwrap() // this should be a text node
         .as_text().unwrap()
         .parse::<EhArticleKind>()?;
 
@@ -141,7 +144,7 @@ pub fn parse_article_info(doc: &Document)
         .first_child().unwrap()
         .text();
 
-    // parse #gdd which has most informations
+    // parse #gdd, which has most useful informations
     let mut iter = doc
         .find(Attr("id", "gdd"))
         .nth(0).unwrap()
@@ -157,16 +160,17 @@ pub fn parse_article_info(doc: &Document)
     let parent = {
         let node = iter
             .next().unwrap()
-            .last_child().unwrap();
+            .last_child().unwrap()
+            .first_child().unwrap();
 
-        if let Some(link) = node.first_child() {
-            // get a link to the parent
-            link.attr("href").unwrap()
-                .trim_start_matches("https://e-hentai.org")
-                .to_string()
-        } else {
+        if let Some("None") = node.as_text() {
             // no parent; node.text() would be "None"
             String::new()
+        } else {
+            // get a link to the parent
+            node.attr("href").unwrap()
+                .trim_start_matches("https://e-hentai.org")
+                .to_string()
         }
     };
 
@@ -174,6 +178,7 @@ pub fn parse_article_info(doc: &Document)
     let visible = iter
         .next().unwrap()
         .last_child().unwrap()
+        .first_child().unwrap()
         .as_text().unwrap() == "Yes";
 
     let (language, translated) = {
@@ -181,8 +186,8 @@ pub fn parse_article_info(doc: &Document)
             .next().unwrap()
             .last_child().unwrap();
 
-        let language = node.as_text().unwrap().to_string();
-        let translated = node.first_child().is_some();
+        let language = node.first_child().unwrap().text();
+        let translated = node.last_child().unwrap().name().is_some();
 
         (language, translated)
     };
@@ -195,6 +200,7 @@ pub fn parse_article_info(doc: &Document)
     let length = iter
         .next().unwrap()
         .last_child().unwrap()
+        .first_child().unwrap()
         .as_text().unwrap()
         .split_ascii_whitespace()
         .nth(0).unwrap()
@@ -204,6 +210,7 @@ pub fn parse_article_info(doc: &Document)
         let text = iter
             .next().unwrap()
             .last_child().unwrap()
+            .first_child().unwrap()
             .as_text().unwrap();
 
         match text {
@@ -220,12 +227,14 @@ pub fn parse_article_info(doc: &Document)
     let rating_count = doc
         .find(Attr("id", "rating_count"))
         .nth(0).unwrap()
+        .first_child().unwrap()
         .as_text().unwrap()
         .parse::<usize>().unwrap();
 
     let rating = doc
         .find(Attr("id", "rating_label"))
         .nth(0).unwrap()
+        .first_child().unwrap()
         .as_text().unwrap()
         .split_ascii_whitespace()
         .nth(1).unwrap()
@@ -242,7 +251,10 @@ pub fn parse_article_info(doc: &Document)
 
         for row in list.children() {
             // remove last colon and parse
-            let cat = row.first_child().unwrap().as_text().unwrap();
+            let cat = row
+                .first_child().unwrap()
+                .first_child().unwrap()
+                .as_text().unwrap();
             let cat = cat[..(cat.len() - 1)].parse::<EhTagKind>()?;
 
             for elem in row.last_child().unwrap().children() {

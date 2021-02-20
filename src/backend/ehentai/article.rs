@@ -85,6 +85,7 @@ pub struct EhArticle {
     pub(crate) original_title: String,
 
     pub(crate) kind: EhArticleKind,
+    // pub(crate) thumb: String,
     pub(crate) uploader: String,
     pub(crate) posted: String,
     pub(crate) parent: String,
