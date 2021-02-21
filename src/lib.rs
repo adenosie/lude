@@ -5,6 +5,13 @@
 extern crate tokio;
 extern crate tokio_native_tls;
 extern crate hyper;
+extern crate select;
 
 mod detour;
 mod client;
+mod backend;
+
+pub use detour::Detour;
+pub use client::Client;
+
+pub use backend::{ehentai};
