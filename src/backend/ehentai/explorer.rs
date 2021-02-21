@@ -76,6 +76,28 @@ impl EhExplorer {
             Ok(article)
         }
     }
+
+    pub fn save_images(&mut self, article: EhArticle)
+        -> impl Future<Output = Result<Vec<Vec<u8>>, Box<dyn Error>>> + '_ {
+        async move {
+            let mut res = Vec::new();
+
+            for path in &article.images {
+                let doc = self.client.query_html(path).await?;
+                let path = parser::parse_image(&doc)?;
+
+                // FIXME: full images are outside the e-hentai.org domain,
+                // which is something like https://*.*.hath.network/h/*/*.jpg.
+                // we can only connect to one domain(e-hentai.org) currently,
+                // so we can't get the images right now.
+
+                // let resp = self.client.get(&path).await?;
+                return unimplemented!();
+            }
+
+            Ok(res)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -86,21 +108,20 @@ mod tests {
     async fn search() {
         let mut explorer = EhExplorer::new().await.unwrap();
 
-        let list = explorer.search("language:korean").await.unwrap();
+        let mut list = explorer.search("language:korean").await.unwrap();
+        let article = explorer.article(list.pop().unwrap()).await.unwrap();
 
-        for pending in list.into_iter() {
-            println!("{}", pending.title);
-            let article = explorer.article(pending).await.unwrap();
+        /*
+        let images = explorer.save_images(article).await.unwrap();
 
-            println!("{}", article.original_title);
-            println!("{}", article.kind);
+        use std::fs::File;
+        use std::io::prelude::*;
 
-            for tag in &article.tags[EhTagKind::Female] {
-                print!("{} ", tag);
-            }
-
-            println!("");
+        for (i, image) in images.iter().enumerate() {
+            let mut file = File::create(format!("test/{}.jpg", i)).unwrap();
+            file.write_all(&image).unwrap();
         }
+        */
     }
 
     /*

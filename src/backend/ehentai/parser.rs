@@ -314,3 +314,14 @@ pub fn parse_image_list(doc: &Document)
     
     Ok(images)
 }
+
+pub fn parse_image(doc: &Document)
+    -> Result<String, Box<dyn Error>> {
+    Ok(
+        doc
+        .find(Attr("id", "img"))
+        .nth(0).unwrap()
+        .attr("src").unwrap()
+        .to_string()
+    )
+}

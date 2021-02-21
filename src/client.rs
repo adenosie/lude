@@ -65,21 +65,33 @@ impl Client {
         self.sender.send_request(req)
     }
 
-    pub fn query_html(&mut self, path: &str)
-        -> impl Future<Output = Result<Document, Box<dyn Error>>> + '_ {
+    pub fn query(&mut self, path: &str, mime: &str)
+        -> impl Future<Output = Result<Vec<u8>, Box<dyn Error>>> + '_ {
         let path = path.to_owned();
+        let mime = mime.to_owned();
 
         async move {
             let req = Request::builder()
                 .method("GET")
                 .header("Host", self.host.as_str())
                 .uri(path)
-                .header("Accept", "text/html")
+                .header("Accept", mime.as_str())
                 .body(Body::empty())?;
 
             let res = self.send_request(req).await?;
             let bytes = hyper::body::to_bytes(res.into_body()).await?;
-            let file = String::from_utf8(bytes.to_vec())?;
+            Ok(bytes.to_vec())
+        }
+    }
+
+    // just a convenience for query() where mime is "text/html"
+    pub fn query_html(&mut self, path: &str)
+        -> impl Future<Output = Result<Document, Box<dyn Error>>> + '_ {
+        let query = self.query(path, "text/html");
+
+        async move {
+            let bytes = query.await?;
+            let file = String::from_utf8(bytes)?;
 
             Ok(Document::from(file.as_str()))
         }
