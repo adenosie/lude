@@ -64,7 +64,6 @@ pub fn parse_list(doc: &Document)
 
             let path = node
                 .attr("href").unwrap()
-                .trim_start_matches("https://e-hentai.org")
                 .to_string();
 
             let mut iter = node.children();
@@ -169,7 +168,6 @@ pub fn parse_article_info(doc: &Document)
         } else {
             // get a link to the parent
             node.attr("href").unwrap()
-                .trim_start_matches("https://e-hentai.org")
                 .to_string()
         }
     };
@@ -306,7 +304,6 @@ pub fn parse_image_list(doc: &Document)
             .first_child().unwrap()
             .first_child().unwrap()
             .attr("href").unwrap()
-            .trim_start_matches("https://e-hentai.org")
             .to_string();
 
         images.push(path);
