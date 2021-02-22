@@ -5,10 +5,15 @@ authors = ["Adenosie <adenosiez@gmail.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[workspace]
+members = [
+    "src/detour" 
+]
 
 [dependencies]
 tokio = { version = "1", features = ["rt", "net", "macros"] }
 tokio-native-tls = "0.3"
 
 hyper = { version = "0.14", features = ["client", "tcp", "http1", "http2"] }
+detour = { path = "src/detour" }
 select = "0.5"
