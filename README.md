@@ -1,13 +1,13 @@
 # libhentai
 
-Nothing works right now. Go and come again later!
+Very few things work right now. Go and come again later!
 
 ## Todo List
 
 - [x] Bypassing DPI
-- [ ] Provide decent networking frontend with bypassing censorships
+- [x] Provide decent networking frontend with bypassing censorships
 - Downloading hentais from:
-    - [ ] E-hentai
+    - [x] E-hentai
     - [ ] Exhentai
     - [ ] Hitomi
     - And more...
