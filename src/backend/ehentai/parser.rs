@@ -11,11 +11,22 @@ use super::tag::{EhParseTagError, EhTagKind, EhTag, EhTagMap};
 // take a document for a list page (e.g. search result),
 // return the list of the articles in the document
 pub fn parse_list(doc: &Document)
-    -> Result<Vec<EhPendingArticle>, Box<dyn Error>> {
+    -> Result<Option<Vec<EhPendingArticle>>, Box<dyn Error>> {
     let table = doc
         .find(Name("table").and(Class("gltc")))
-        .nth(0).unwrap()
-        .first_child().unwrap();
+        .nth(0);
+
+    // no hits found
+    if table.is_none() {
+        return Ok(None);
+    }
+
+    let table = table.unwrap().first_child().unwrap();
+
+    // requested invalid page
+    if table.children().nth(1).unwrap().first_child().unwrap().as_text().is_some() {
+        return Ok(None);
+    }
 
     // we can't '?' in a closure, so can't we map().collect()
     let mut list = Vec::new();
@@ -113,7 +124,7 @@ pub fn parse_list(doc: &Document)
         });
     }
 
-    Ok(list)
+    Ok(Some(list))
 }
 
 // take a document of an article gallery, return information of the article

@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 extern crate tokio;
+extern crate tokio_stream;
 extern crate tokio_native_tls;
 extern crate hyper;
 extern crate select;

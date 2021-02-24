@@ -12,6 +12,7 @@ members = [
 
 [dependencies]
 tokio = { version = "1", features = ["rt", "net", "macros"] }
+tokio-stream = "0.1"
 tokio-native-tls = "0.3"
 
 hyper = { version = "0.14", features = ["client", "tcp", "http1", "http2"] }
