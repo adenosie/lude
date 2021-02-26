@@ -72,6 +72,16 @@ pub struct Page<'a> {
 }
 
 impl<'a> Page<'a> {
+    pub(super) fn new(client: &'a Client, page: usize, query: String) -> Self {
+        Self {
+            client,
+            page,
+            len: None,
+            query,
+            task: None
+        }
+    }
+
     fn uri(&self) -> Result<Uri, impl Error> {
         Uri::builder()
             .scheme("https")
@@ -94,6 +104,10 @@ impl<'a> Stream for Page<'a> {
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>)
         -> Poll<Option<Self::Item>> {
+        if self.len.filter(|len| len <= &self.page).is_some() {
+            return Poll::Ready(None);
+        }
+
         let _self = self.get_mut();
 
         if _self.task.is_none() {
@@ -102,6 +116,8 @@ impl<'a> Stream for Page<'a> {
 
         if let Some(ref mut task) = _self.task {
             task.as_mut().poll(cx).map(|res| {
+                _self.task = None;
+
                 // Result<Document, _> => Option<Result<Vec<_>, _>> (in single line!)
                 res.map_or_else(|e| Some(Err(e)), |doc| parser::parse_list(&doc).transpose())
             })
@@ -130,26 +146,8 @@ impl EhExplorer {
         }
     }
 
-    // pub fn search(&self, keyword: &str) -> Page<'_> {
-    //     Page {
-    //         client: &self.client,
-    //         page: 0,
-    //         len: None,
-    //         query: format!("f_search={}", keyword),
-    //     }
-    // }
-
-    pub fn search(&self, query: &str)
-        -> impl Future<Output = Result<Option<Vec<EhPendingArticle>>, ErrorBox>> + '_ {
-        let query = percent_encode(query);
-
-        async move {
-            let doc = get_html(
-                &self.client,
-                format!("https://e-hentai.org/?f_search={}", query).parse()?
-            ).await?;
-            parser::parse_list(&doc)
-        }
+    pub fn search(&self, keyword: &str) -> Page<'_> {
+        Page::new(&self.client, 0, format!("f_search={}", keyword))
     }
 
     pub fn article(&self, pending: EhPendingArticle)
@@ -205,8 +203,13 @@ mod tests {
     async fn search() {
         let mut explorer = EhExplorer::new().await.unwrap();
 
-        let mut list = explorer.search("language:korean").await.unwrap().unwrap();
-        let article = explorer.article(list.pop().unwrap()).await.unwrap();
+        let mut page = explorer.search("language:korean").take(2);
+
+        while let Some(list) = page.try_next().await.unwrap() {
+            list.iter().for_each(|pend| println!("{}", pend.title));
+        }
+
+        // let article = explorer.article(list.pop().unwrap()).await.unwrap();
 
         // this takes too long...
         // let images = explorer.save_images(article).await.unwrap();
