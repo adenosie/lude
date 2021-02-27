@@ -3,9 +3,11 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use std::error::Error;
+use std::num::ParseIntError;
 use select::document::Document;
+use select::node::Node;
 use select::predicate::{Predicate, Attr, Class, Name};
-use super::article::{ArticleKind, PendingArticle, Comment, Article};
+use super::article::{ArticleKind, PendingArticle, Score, Comment, Article};
 use super::tag::{ParseTagError, TagKind, Tag, TagMap};
 
 // take a document for an article list,
@@ -228,8 +230,7 @@ pub fn article(doc: &Document)
         .last_child().unwrap()
         .first_child().unwrap()
         .as_text().unwrap()
-        .split_ascii_whitespace()
-        .nth(0).unwrap()
+        .strip_suffix(" pages").unwrap() // it seems there is no article with 1 page
         .parse::<usize>()?;
 
     let favorited = {
@@ -243,10 +244,9 @@ pub fn article(doc: &Document)
             "Never" => 0,
             "Once" => 1,
             "Twice" => 2,
-            more => more // n times
-                .split_ascii_whitespace()
-                .nth(0).unwrap()
-                .parse::<usize>().unwrap()
+            more => more // the text would be like "(n) times"
+                .strip_suffix(" times").unwrap()
+                .parse::<usize>()?
         }
     };
 
@@ -255,7 +255,7 @@ pub fn article(doc: &Document)
         .nth(0).unwrap()
         .first_child().unwrap()
         .as_text().unwrap()
-        .parse::<usize>().unwrap();
+        .parse::<usize>()?;
 
     let rating = doc
         .find(Attr("id", "rating_label"))
@@ -264,7 +264,7 @@ pub fn article(doc: &Document)
         .as_text().unwrap()
         .split_ascii_whitespace()
         .nth(1).unwrap()
-        .parse::<f64>().unwrap();
+        .parse::<f64>()?;
 
     let tags = {
         let list = doc
@@ -291,6 +291,12 @@ pub fn article(doc: &Document)
         tags
     };
 
+    // parse comments; .c1 is a class each comment node belongs to
+    let comments = doc
+        .find(Class("c1"))
+        .map(|node| comment(&node))
+        .collect::<Result<_, _>>()?;
+
     Ok(Article {
         title,
         original_title,
@@ -308,13 +314,145 @@ pub fn article(doc: &Document)
         rating,
         tags,
         images: Vec::new(),
-        comments: Vec::new(),
+        comments,
     })
 }
 
-pub fn comments(doc: &Document)
-    -> Result<(Vec<Comment>, bool), Box<dyn Error>> {
-    unimplemented!()
+pub fn comments(doc: &Document) -> Result<Vec<Comment>, Box<dyn Error>> {
+    doc.find(Class("c1")).map(|node| comment(&node)).collect()
+}
+
+fn comment(node: &Node) -> Result<Comment, Box<dyn Error>> {
+    let (top, bottom, votes, edited) = {
+        let mut iter = node.children();
+
+        let first = iter.next().unwrap();
+        let second = iter.next().unwrap();
+        let third = iter.next().unwrap();
+        let fourth = iter.next();
+
+        // if the comment is edited, "Last edited on (date)." 
+        // message is shown before the votes list
+        if let Some(fourth) = fourth {
+            (first, second, fourth, Some(third))
+        } else {
+            (first, second, third, None)
+        }
+    };
+
+    let (left, right) = {
+        let mut iter = top.children();
+
+        (iter.next().unwrap(), iter.next().unwrap())
+    };
+
+    // parse integer which is always prefixed with a '+' or '-' sign
+    // necessary for parsing score of a comment, which is prefixed so
+    fn parse_prefixed(text: &str) -> Result<i64, ParseIntError> {
+        // rust's parse() can't comprehend prefix '+' sign
+        let sign = match text.chars().nth(0) {
+            Some('+') => 1,
+            Some('-') => -1,
+            _ => unreachable!() // logically impossible
+        };
+    
+        text[1..].parse::<i64>().map(|x| x * sign)
+    }
+    
+    let (posted, writer) = {
+        let mut iter = left.children();
+
+        let posted = iter
+            .next().unwrap()
+            .as_text().unwrap()
+            .strip_prefix("Posted on ").unwrap()
+            .strip_suffix(" by:   ").unwrap() // " by: &nbsp; "
+            .to_owned();
+
+        let writer = iter
+            .next().unwrap()
+            .first_child().unwrap()
+            .text();
+
+        (posted, writer)
+    };
+
+    let score = if right.is(Class("c4")) {
+        None
+    } else {
+        let text = right
+            .last_child().unwrap()
+            .first_child().unwrap()
+            .as_text().unwrap();
+
+        let score = parse_prefixed(text)?;
+
+        // parse a string formatted like "(writer) (score)"
+        fn parse_vote(vote: &str) -> Result<(String, i64), ParseIntError> {
+            // position of the last whitespace
+            let pos = vote.rfind(' ').unwrap();
+
+            Ok((vote[..pos].to_owned(), parse_prefixed(&vote[(pos + 1)..])?))
+        }
+
+        let omitted_voters = votes
+            .last_child().unwrap()
+            .as_text()
+            .and_then(|text| text.strip_prefix(", and "))
+            .and_then(|text| text.strip_suffix(" more..."))
+            .map_or(Ok(0), |text| text.parse())?;
+
+        let votes = {
+            let mut list = Vec::new();
+
+            let base = votes
+                .first_child().unwrap()
+                .as_text().unwrap();
+
+            let base = base
+                .strip_suffix(", ")
+                .unwrap_or(base);
+
+            list.push(parse_vote(base)?);
+
+            for span in votes.find(Name("span")) {
+                let vote = span
+                    .first_child().unwrap()
+                    .as_text().unwrap();
+
+                list.push(parse_vote(vote)?);
+            }
+
+            list
+        };
+
+        Some(Score {
+            score,
+            votes,
+            omitted_voters
+        })
+    };
+
+    let edited = if let Some(node) = edited {
+        Some(node
+            .children()
+            .nth(1).unwrap()
+            .text())
+    } else {
+        None
+    };
+
+    let content = bottom
+        .first_child().unwrap()
+        .text();
+    
+    Ok(Comment {
+        posted,
+        edited,
+        score,
+        writer,
+        content
+    })
 }
 
 // take a document of an article gallery, return list of link to image of the page

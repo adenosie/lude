@@ -84,11 +84,21 @@ pub struct PendingArticle {
     pub(crate) length: usize,
 }
 
+pub struct Score {
+    pub score: i64,
+    pub votes: Vec<(String, i64)>,
+    pub omitted_voters: usize,
+}
+
 pub struct Comment {
     pub(crate) posted: String,
-    pub(crate) score: i64,
-    pub(crate) nickname: String,
-    pub(crate) content: String
+    pub(crate) edited: Option<String>,
+
+    // None if uploader comment
+    pub(crate) score: Option<Score>,
+
+    pub(crate) writer: String,
+    pub(crate) content: String,
 }
 
 pub struct Article {

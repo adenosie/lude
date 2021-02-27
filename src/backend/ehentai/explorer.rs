@@ -175,13 +175,14 @@ impl Explorer {
         Page::new(&self.client, 0, format!("f_search={}", percent_encode(keyword)))
     }
 
+    // FIXME: this can't parse articles with offensive for everyone flag
     pub fn article_from_path(&self, path: &str)
         -> impl Future<Output = Result<Article, ErrorBox>> {
         let client = self.client.clone(); // it seems cloning client is cheap
         let path = path.to_owned();
 
         async move {
-            let doc = get_html(&client, path.parse()?).await?;
+            let doc = get_html(&client, format!("{}?hc=1", path).parse()?).await?;
             let mut article = parser::article(&doc)?;
 
             let mut vec = parser::image_list(&doc)?;
@@ -238,10 +239,11 @@ mod tests {
     async fn search() {
         let mut explorer = Explorer::new().await.unwrap();
 
-        let mut page = explorer.search("language:korean").skip(1).take(5);
+        let mut page = explorer.search("language:korean").skip(1).take(2);
 
-        while let Some(list) = page.try_next().await.unwrap() {
+        while let Some(mut list) = page.try_next().await.unwrap() {
             list.iter().for_each(|pend| println!("{}", pend.title));
+            let article = explorer.article(list.pop().unwrap()).await.unwrap();
         }
 
         // let article = explorer.article(list.pop().unwrap()).await.unwrap();
