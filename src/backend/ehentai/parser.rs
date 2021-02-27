@@ -5,13 +5,26 @@
 use std::error::Error;
 use select::document::Document;
 use select::predicate::{Predicate, Attr, Class, Name};
-use super::article::{EhArticleKind, EhPendingArticle, EhArticle};
-use super::tag::{EhParseTagError, EhTagKind, EhTag, EhTagMap};
+use super::article::{ArticleKind, PendingArticle, Comment, Article};
+use super::tag::{ParseTagError, TagKind, Tag, TagMap};
+
+// take a document for an article list,
+// return total count of results of the list
+pub fn search_results(doc: &Document) -> Result<usize, Box<dyn Error>> {
+    Ok(doc.find(Class("ip"))
+        .nth(0).unwrap()
+        .first_child().unwrap()
+        .as_text().unwrap() // this would be like "Showing 608,394 results"
+        .split_ascii_whitespace()
+        .nth(1).unwrap()
+        .replace(',', "")
+        .parse::<usize>()?)
+}
 
 // take a document for a list page (e.g. search result),
 // return the list of the articles in the document
-pub fn parse_list(doc: &Document)
-    -> Result<Option<Vec<EhPendingArticle>>, Box<dyn Error>> {
+pub fn article_list(doc: &Document)
+    -> Result<Option<Vec<PendingArticle>>, Box<dyn Error>> {
     let table = doc
         .find(Name("table").and(Class("gltc")))
         .nth(0);
@@ -49,7 +62,7 @@ pub fn parse_list(doc: &Document)
         // the first column contains category of the article
         let kind = {
             let text = first.first_child().unwrap().text();
-            text.parse::<EhArticleKind>()?
+            text.parse::<ArticleKind>()?
         };
 
         // the second contains thumbnail, uploaded time,
@@ -89,8 +102,8 @@ pub fn parse_list(doc: &Document)
             let tags = iter
                 .next().unwrap()
                 .children()
-                .map(|x| x.attr("title").ok_or(EhParseTagError())?.parse::<EhTag>())
-                .collect::<Result<EhTagMap, _>>()?;
+                .map(|x| x.attr("title").ok_or(ParseTagError())?.parse::<Tag>())
+                .collect::<Result<TagMap, _>>()?;
 
             (path, title, tags)
         };
@@ -112,7 +125,7 @@ pub fn parse_list(doc: &Document)
             (uploader, length)
         };
 
-        list.push(EhPendingArticle {
+        list.push(PendingArticle {
             kind,
             thumb,
             posted,
@@ -131,8 +144,8 @@ pub fn parse_list(doc: &Document)
 //
 // NOTE: this function DOES NOT parse the image list. call parse_image_list() 
 // and change the article data accordingly to get the list of images.
-pub fn parse_article_info(doc: &Document)
-    -> Result<EhArticle, Box<dyn Error>> {
+pub fn article(doc: &Document)
+    -> Result<Article, Box<dyn Error>> {
     let (title, original_title) = {
         let mut iter = doc.find(Attr("id", "gd2")).nth(0).unwrap().children();
         
@@ -150,7 +163,7 @@ pub fn parse_article_info(doc: &Document)
         .first_child().unwrap()
         .first_child().unwrap() // this should be a text node
         .as_text().unwrap()
-        .parse::<EhArticleKind>()?;
+        .parse::<ArticleKind>()?;
 
     let uploader = doc
         .find(Attr("id", "gdn"))
@@ -260,7 +273,7 @@ pub fn parse_article_info(doc: &Document)
             .first_child().unwrap()
             .first_child().unwrap();
 
-        let mut tags = EhTagMap::new();
+        let mut tags = TagMap::new();
 
         for row in list.children() {
             // remove last colon and parse
@@ -268,7 +281,7 @@ pub fn parse_article_info(doc: &Document)
                 .first_child().unwrap()
                 .first_child().unwrap()
                 .as_text().unwrap();
-            let cat = cat[..(cat.len() - 1)].parse::<EhTagKind>()?;
+            let cat = cat[..(cat.len() - 1)].parse::<TagKind>()?;
 
             for elem in row.last_child().unwrap().children() {
                 tags[cat].push(elem.text());
@@ -278,7 +291,7 @@ pub fn parse_article_info(doc: &Document)
         tags
     };
 
-    Ok(EhArticle {
+    Ok(Article {
         title,
         original_title,
         kind,
@@ -295,14 +308,20 @@ pub fn parse_article_info(doc: &Document)
         rating,
         tags,
         images: Vec::new(),
+        comments: Vec::new(),
     })
+}
+
+pub fn comments(doc: &Document)
+    -> Result<(Vec<Comment>, bool), Box<dyn Error>> {
+    unimplemented!()
 }
 
 // take a document of an article gallery, return list of link to image of the page
 //
 // NOTE: this function can only get 40 images in maximum at a time. get document
 // of another page and call this again to obtain all images.
-pub fn parse_image_list(doc: &Document)
+pub fn image_list(doc: &Document)
     -> Result<Vec<String>, Box<dyn Error>> {
     let mut images = Vec::new();
     
@@ -327,7 +346,7 @@ pub fn parse_image_list(doc: &Document)
     Ok(images)
 }
 
-pub fn parse_image(doc: &Document)
+pub fn image(doc: &Document)
     -> Result<String, Box<dyn Error>> {
     Ok(
         doc

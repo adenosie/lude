@@ -14,8 +14,8 @@ use hyper::client::connect::HttpConnector;
 use detour::HttpsConnector;
 use select::document::Document;
 
-use super::article::{EhArticle, EhArticleKind, EhPendingArticle};
-use super::tag::{EhTagMap, EhTagKind};
+use super::article::{Article, ArticleKind, PendingArticle};
+use super::tag::{TagMap, TagKind};
 use super::parser;
 
 type ErrorBox = Box<dyn Error>;
@@ -42,9 +42,10 @@ fn percent_encode(from: &str) -> String {
 type Client = hyper::Client<HttpsConnector<HttpConnector>, Body>;
 
 fn get_bytes(client: &Client, dest: Uri)
-    -> impl Future<Output = Result<Vec<u8>, ErrorBox>> + '_ {
+    -> impl Future<Output = Result<Vec<u8>, ErrorBox>> {
+    let task = client.get(dest);
     async move {
-        let res = client.get(dest).await?;
+        let res = task.await?;
         let bytes = hyper::body::to_bytes(res.into_body()).await?;
 
         Ok(bytes.to_vec())
@@ -52,9 +53,10 @@ fn get_bytes(client: &Client, dest: Uri)
 }
 
 fn get_html(client: &Client, dest: Uri)
-    -> impl Future<Output = Result<Document, ErrorBox>> + '_ {
+    -> impl Future<Output = Result<Document, ErrorBox>> {
+    let task = client.get(dest);
     async move {
-        let res = client.get(dest).await?;
+        let res = task.await?;
         let bytes = hyper::body::to_bytes(res.into_body()).await?;
         let file = str::from_utf8(&bytes)?;
 
@@ -65,10 +67,11 @@ fn get_html(client: &Client, dest: Uri)
 pub struct Page<'a> {
     client: &'a Client,
     page: usize,
-    len: Option<usize>, // TODO
+    results: Option<usize>,
     query: String,
 
-    task: Option<Pin<Box<dyn Future<Output = Result<Document, ErrorBox>> + 'a>>>
+    // what a long type...
+    task: Option<Pin<Box<dyn Future<Output = Result<Document, ErrorBox>>>>>
 }
 
 impl<'a> Page<'a> {
@@ -76,7 +79,7 @@ impl<'a> Page<'a> {
         Self {
             client,
             page,
-            len: None,
+            results: None,
             query,
             task: None
         }
@@ -90,23 +93,38 @@ impl<'a> Page<'a> {
             .build()
     }
 
+    // number of found search results
+    pub fn results(&self) -> Option<usize> {
+        self.results
+    }
+
+    pub fn len(&self) -> Option<usize> {
+        const ARTICLES_PER_PAGE: usize = 25;
+
+        // self.results must not be 0
+        self.results.map(|n| (n - 1) / ARTICLES_PER_PAGE + 1)
+    }
+
     pub fn page(&self) -> usize {
         self.page
     }
 
-    pub fn set_page(&mut self, page: usize) {
-        self.page = page;
+    // Stream doesn't provide nth() nor overloading skip()
+    pub fn skip(mut self, n: usize) -> Self {
+        self.page += n;
+        self.task = None; // do i have to reset?
+        self
     }
 }
 
 impl<'a> Stream for Page<'a> {
-    type Item = Result<Vec<EhPendingArticle>, ErrorBox>;
+    type Item = Result<Vec<PendingArticle>, ErrorBox>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>)
         -> Poll<Option<Self::Item>> {
-        if self.len.filter(|len| len <= &self.page).is_some() {
-            return Poll::Ready(None);
-        }
+        // if self.len().filter(|len| len <= &self.page).is_some() {
+        //     return Poll::Ready(None);
+        // }
 
         let _self = self.get_mut();
 
@@ -118,8 +136,15 @@ impl<'a> Stream for Page<'a> {
             task.as_mut().poll(cx).map(|res| {
                 _self.task = None;
 
-                // Result<Document, _> => Option<Result<Vec<_>, _>> (in single line!)
-                res.map_or_else(|e| Some(Err(e)), |doc| parser::parse_list(&doc).transpose())
+                res.map_or_else(|e| Some(Err(e)), |doc| {
+                    _self.page += 1;
+                    match parser::search_results(&doc) {
+                        Ok(n) => _self.results = Some(n),
+                        Err(e) => return Some(Err(e))
+                    }
+
+                    parser::article_list(&doc).transpose()
+                })
             })
         } else {
             // compile error if commented out
@@ -128,13 +153,13 @@ impl<'a> Stream for Page<'a> {
     }
 }
 
-pub struct EhExplorer {
+pub struct Explorer {
     client: Client
 }
 
-impl EhExplorer {
+impl Explorer {
     pub fn new()
-        -> impl Future<Output = Result<EhExplorer, ErrorBox>> {
+        -> impl Future<Output = Result<Explorer, ErrorBox>> {
         async {
             let https = HttpsConnector::new();
             let client = hyper::Client::builder()
@@ -147,29 +172,32 @@ impl EhExplorer {
     }
 
     pub fn search(&self, keyword: &str) -> Page<'_> {
-        Page::new(&self.client, 0, format!("f_search={}", keyword))
+        Page::new(&self.client, 0, format!("f_search={}", percent_encode(keyword)))
     }
 
-    pub fn article(&self, pending: EhPendingArticle)
-        -> impl Future<Output = Result<EhArticle, ErrorBox>> + '_ {
-        // one page shows 40 images at max
-        let page_len: usize = (pending.length - 1) / 40 + 1;
+    pub fn article_from_path(&self, path: &str)
+        -> impl Future<Output = Result<Article, ErrorBox>> {
+        let client = self.client.clone(); // it seems cloning client is cheap
+        let path = path.to_owned();
 
         async move {
-            let doc = get_html(&self.client, pending.path.parse()?).await?;
-            let mut article = parser::parse_article_info(&doc)?;
+            let doc = get_html(&client, path.parse()?).await?;
+            let mut article = parser::article(&doc)?;
 
-            let mut vec = parser::parse_image_list(&doc)?;
+            let mut vec = parser::image_list(&doc)?;
             article.images.append(&mut vec);
+
+            const IMAGES_PER_PAGE: usize = 40;
+            let page_len = (article.length - 1) / IMAGES_PER_PAGE + 1;
 
             // TODO: this could be done async
             for i in 1..page_len {
                 let doc = get_html(
-                    &self.client,
-                    format!("{}?p={}", pending.path, i).parse()?
+                    &client,
+                    format!("{}?p={}", path, i).parse()?
                 ).await?;
 
-                let mut vec = parser::parse_image_list(&doc)?;
+                let mut vec = parser::image_list(&doc)?;
                 article.images.append(&mut vec);
             }
 
@@ -177,16 +205,23 @@ impl EhExplorer {
         }
     }
 
-    pub fn save_images(&self, article: EhArticle)
-        -> impl Future<Output = Result<Vec<Vec<u8>>, ErrorBox>> + '_ {
+    pub fn article(&self, pending: PendingArticle)
+        -> impl Future<Output = Result<Article, ErrorBox>> {
+        self.article_from_path(&pending.path)
+    }
+
+    pub fn save_images(&self, article: Article)
+        -> impl Future<Output = Result<Vec<Vec<u8>>, ErrorBox>> {
+        let client = self.client.clone();
+
         async move {
             let mut res = Vec::new();
 
             for path in &article.images {
-                let doc = get_html(&self.client, path.parse()?).await?;
-                let path = parser::parse_image(&doc)?;
+                let doc = get_html(&client, path.parse()?).await?;
+                let path = parser::image(&doc)?;
 
-                let image = get_bytes(&self.client, path.parse()?).await?;
+                let image = get_bytes(&client, path.parse()?).await?;
                 res.push(image);
             }
 
@@ -201,9 +236,9 @@ mod tests {
 
     #[tokio::test]
     async fn search() {
-        let mut explorer = EhExplorer::new().await.unwrap();
+        let mut explorer = Explorer::new().await.unwrap();
 
-        let mut page = explorer.search("language:korean").take(2);
+        let mut page = explorer.search("language:korean").skip(1).take(5);
 
         while let Some(list) = page.try_next().await.unwrap() {
             list.iter().for_each(|pend| println!("{}", pend.title));
@@ -217,25 +252,28 @@ mod tests {
 
     /*
     async fn ideal() -> Result<(), Box<dyn Error>> {
-        let explorer = EhExplorer::new().await?;
+        let explorer = Explorer::new().await?;
 
         let search = explorer.search("artist:hota.");
 
-        while let Some(page) = search.try_next().await? {
-            for pending in page.iter() {
-                println!("{}", pending.title());
-                let article = pending.load_into().await?;
-                assert!(article.tags().has("artist:hota."));
+        tokio::spawn!(async move {
+            while let Some(page) = search.try_next().await? {
+                for pending in page.iter() {
+                    // println!("{}", pending.title());
+                    // let article = pending.load_into().await?;
+                    // assert!(article.tags().has("artist:hota."));
+                }
             }
-        }
+        }).await?;
 
-        let article = explorer.from_path("/g/1556174/cfe385099d/").await?;
+        let article = explorer.article_from_path("/g/1556174/cfe385099d/").await?;
         assert_eq!(
             article.title(), 
             "(C97) [Bad Mushrooms (Chicke III, 4why)] \
             Nibun no Yuudou | 2등분의 유혹 \
             (Gotoubun no Hanayome) [Korean] [Team Edge]"
         );
+        
     }
     */
 }

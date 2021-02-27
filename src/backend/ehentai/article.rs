@@ -5,9 +5,9 @@
 use std::fmt;
 use std::str::FromStr;
 use std::error::Error;
-use super::tag::EhTagMap;
+use super::tag::TagMap;
 
-pub enum EhArticleKind {
+pub enum ArticleKind {
     Doujinshi,
     Manga,
     ArtistCG,
@@ -22,73 +22,80 @@ pub enum EhArticleKind {
 }
 
 #[derive(Debug)]
-pub struct EhParseArticleError();
+pub struct ParseArticleKindError();
 
-impl fmt::Display for EhParseArticleError {
+impl fmt::Display for ParseArticleKindError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Failed to format article type")
+        write!(f, "Failed to format gallery type")
     }
 }
 
-impl Error for EhParseArticleError {
+impl Error for ParseArticleKindError {
 
 }
 
-impl FromStr for EhArticleKind {
-    type Err = EhParseArticleError;
+impl FromStr for ArticleKind {
+    type Err = ParseArticleKindError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "Doujinshi" => Ok(EhArticleKind::Doujinshi),
-            "Manga" => Ok(EhArticleKind::Manga),
-            "Artist CG" => Ok(EhArticleKind::ArtistCG),
-            "Game CG" => Ok(EhArticleKind::GameCG),
-            "Western" => Ok(EhArticleKind::Western),
-            "Non-H" => Ok(EhArticleKind::NonH),
-            "Image Set" => Ok(EhArticleKind::ImageSet),
-            "Cosplay" => Ok(EhArticleKind::Cosplay),
-            "Asian Porn" => Ok(EhArticleKind::AsianPorn),
-            "Misc" => Ok(EhArticleKind::Misc),
-            "Private" => Ok(EhArticleKind::Private),
-            _ => Err(EhParseArticleError())
+            "Doujinshi" => Ok(ArticleKind::Doujinshi),
+            "Manga" => Ok(ArticleKind::Manga),
+            "Artist CG" => Ok(ArticleKind::ArtistCG),
+            "Game CG" => Ok(ArticleKind::GameCG),
+            "Western" => Ok(ArticleKind::Western),
+            "Non-H" => Ok(ArticleKind::NonH),
+            "Image Set" => Ok(ArticleKind::ImageSet),
+            "Cosplay" => Ok(ArticleKind::Cosplay),
+            "Asian Porn" => Ok(ArticleKind::AsianPorn),
+            "Misc" => Ok(ArticleKind::Misc),
+            "Private" => Ok(ArticleKind::Private),
+            _ => Err(ParseArticleKindError())
         }
     }
 }
 
-impl fmt::Display for EhArticleKind {
+impl fmt::Display for ArticleKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            EhArticleKind::Doujinshi => write!(f, "Doujinshi"),
-            EhArticleKind::Manga => write!(f, "Manga"),
-            EhArticleKind::ArtistCG => write!(f, "Artist CG"),
-            EhArticleKind::GameCG => write!(f, "Game CG"),
-            EhArticleKind::Western => write!(f, "Western"),
-            EhArticleKind::NonH => write!(f, "Non-H"),
-            EhArticleKind::ImageSet => write!(f, "Image Set"),
-            EhArticleKind::Cosplay => write!(f, "Cosplay"),
-            EhArticleKind::AsianPorn => write!(f, "Asian Porn"),
-            EhArticleKind::Misc => write!(f, "Misc"),
-            EhArticleKind::Private => write!(f, "Private"),
+            ArticleKind::Doujinshi => write!(f, "Doujinshi"),
+            ArticleKind::Manga => write!(f, "Manga"),
+            ArticleKind::ArtistCG => write!(f, "Artist CG"),
+            ArticleKind::GameCG => write!(f, "Game CG"),
+            ArticleKind::Western => write!(f, "Western"),
+            ArticleKind::NonH => write!(f, "Non-H"),
+            ArticleKind::ImageSet => write!(f, "Image Set"),
+            ArticleKind::Cosplay => write!(f, "Cosplay"),
+            ArticleKind::AsianPorn => write!(f, "Asian Porn"),
+            ArticleKind::Misc => write!(f, "Misc"),
+            ArticleKind::Private => write!(f, "Private"),
         }
     }
 }
 
-pub struct EhPendingArticle {
-    pub(crate) kind: EhArticleKind,
+pub struct PendingArticle {
+    pub(crate) kind: ArticleKind,
     pub(crate) thumb: String,
     pub(crate) posted: String,
     pub(crate) path: String,
     pub(crate) title: String,
-    pub(crate) tags: EhTagMap,
+    pub(crate) tags: TagMap,
     pub(crate) uploader: String,
     pub(crate) length: usize,
 }
 
-pub struct EhArticle {
+pub struct Comment {
+    pub(crate) posted: String,
+    pub(crate) score: i64,
+    pub(crate) nickname: String,
+    pub(crate) content: String
+}
+
+pub struct Article {
     pub(crate) title: String,
     pub(crate) original_title: String,
 
-    pub(crate) kind: EhArticleKind,
+    pub(crate) kind: ArticleKind,
     // pub(crate) thumb: String,
     pub(crate) uploader: String,
     pub(crate) posted: String,
@@ -102,7 +109,8 @@ pub struct EhArticle {
     pub(crate) rating_count: usize,
     pub(crate) rating: f64,
 
-    pub(crate) tags: EhTagMap,
+    pub(crate) tags: TagMap,
 
     pub(crate) images: Vec<String>,
+    pub(crate) comments: Vec<Comment>
 }

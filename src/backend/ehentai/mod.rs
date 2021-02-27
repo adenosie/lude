@@ -7,6 +7,6 @@ mod article;
 mod parser;
 mod explorer;
 
-pub use tag::{EhParseTagError, EhTagKind, EhTag, EhTagMap};
-pub use article::{EhArticleKind, EhArticle};
-pub use explorer::{EhExplorer};
+pub use tag::{ParseTagError, TagKind, Tag, TagMap};
+pub use article::{ArticleKind, PendingArticle, Comment, Article};
+pub use explorer::{Explorer};

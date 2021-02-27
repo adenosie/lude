@@ -9,20 +9,20 @@ use std::error::Error;
 use std::ops::{Index, IndexMut};
 
 #[derive(Debug)]
-pub struct EhParseTagError();
+pub struct ParseTagError();
 
-impl fmt::Display for EhParseTagError {
+impl fmt::Display for ParseTagError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Tag with wrong format was given")
     }
 }
 
-impl Error for EhParseTagError {
+impl Error for ParseTagError {
 
 }
 
 #[derive(Clone, Copy)]
-pub enum EhTagKind {
+pub enum TagKind {
     Reclass,
     Language,
     Group,
@@ -34,61 +34,61 @@ pub enum EhTagKind {
     Misc,
 }
 
-impl FromStr for EhTagKind {
-    type Err = EhParseTagError;
+impl FromStr for TagKind {
+    type Err = ParseTagError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             // alternates according to [https://ehwiki.org/wiki/Namespace]
-            "reclass" | "r" => Ok(EhTagKind::Reclass),
-            "language" | "lang" => Ok(EhTagKind::Language),
-            "group" | "creator" | "circle" | "g" => Ok(EhTagKind::Group),
-            "parody" | "series" | "p" => Ok(EhTagKind::Parody),
-            "character" | "char" | "c" => Ok(EhTagKind::Character),
-            "artist" | "a" => Ok(EhTagKind::Artist),
-            "male" | "m" => Ok(EhTagKind::Male),
-            "female" | "f" => Ok(EhTagKind::Female),
-            "misc" | "" => Ok(EhTagKind::Misc),
-            _ => Err(EhParseTagError())
+            "reclass" | "r" => Ok(TagKind::Reclass),
+            "language" | "lang" => Ok(TagKind::Language),
+            "group" | "creator" | "circle" | "g" => Ok(TagKind::Group),
+            "parody" | "series" | "p" => Ok(TagKind::Parody),
+            "character" | "char" | "c" => Ok(TagKind::Character),
+            "artist" | "a" => Ok(TagKind::Artist),
+            "male" | "m" => Ok(TagKind::Male),
+            "female" | "f" => Ok(TagKind::Female),
+            "misc" | "" => Ok(TagKind::Misc),
+            _ => Err(ParseTagError())
         }
     }
 }
 
-impl fmt::Display for EhTagKind {
+impl fmt::Display for TagKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if f.alternate() {
             // give shorter names
             match *self {
-                EhTagKind::Reclass => write!(f, "r"),
-                EhTagKind::Language => write!(f, "lang"),
-                EhTagKind::Group => write!(f, "g"),
-                EhTagKind::Parody => write!(f, "p"),
-                EhTagKind::Character => write!(f, "c"),
-                EhTagKind::Artist => write!(f, "a"),
-                EhTagKind::Male => write!(f, "m"),
-                EhTagKind::Female => write!(f, "f"),
-                EhTagKind::Misc => write!(f, "misc")
+                TagKind::Reclass => write!(f, "r"),
+                TagKind::Language => write!(f, "lang"),
+                TagKind::Group => write!(f, "g"),
+                TagKind::Parody => write!(f, "p"),
+                TagKind::Character => write!(f, "c"),
+                TagKind::Artist => write!(f, "a"),
+                TagKind::Male => write!(f, "m"),
+                TagKind::Female => write!(f, "f"),
+                TagKind::Misc => write!(f, "misc")
             }
         } else {
             match *self {
-                EhTagKind::Reclass => write!(f, "reclass"),
-                EhTagKind::Language => write!(f, "language"),
-                EhTagKind::Group => write!(f, "group"),
-                EhTagKind::Parody => write!(f, "parody"),
-                EhTagKind::Character => write!(f, "character"),
-                EhTagKind::Artist => write!(f, "artist"),
-                EhTagKind::Male => write!(f, "male"),
-                EhTagKind::Female => write!(f, "female"),
-                EhTagKind::Misc => write!(f, "misc")
+                TagKind::Reclass => write!(f, "reclass"),
+                TagKind::Language => write!(f, "language"),
+                TagKind::Group => write!(f, "group"),
+                TagKind::Parody => write!(f, "parody"),
+                TagKind::Character => write!(f, "character"),
+                TagKind::Artist => write!(f, "artist"),
+                TagKind::Male => write!(f, "male"),
+                TagKind::Female => write!(f, "female"),
+                TagKind::Misc => write!(f, "misc")
             }
         }
     }
 }
 
-pub struct EhTag(EhTagKind, String);
+pub struct Tag(TagKind, String);
 
-impl FromStr for EhTag {
-    type Err = EhParseTagError;
+impl FromStr for Tag {
+    type Err = ParseTagError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let colon = s.as_bytes().iter().position(|&x| x == b':');
@@ -98,21 +98,21 @@ impl FromStr for EhTag {
                 let category = s[..pos].parse()?;
                 let tag = String::from(&s[(pos + 1)..]);
 
-                Ok(EhTag(category, tag))
+                Ok(Tag(category, tag))
             },
-            None => Err(EhParseTagError())
+            None => Err(ParseTagError())
         }
     }
 }
 
-impl fmt::Display for EhTag {
+impl fmt::Display for Tag {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}:{}", self.0, self.1)
     }
 }
 
 #[derive(Default)]
-pub struct EhTagMap {
+pub struct TagMap {
     // all is (probably) sorted alphabetically
     // (because the webpage gives tags so)
     language: Vec<String>,
@@ -126,57 +126,57 @@ pub struct EhTagMap {
     misc: Vec<String>,
 }
 
-impl EhTagMap {
+impl TagMap {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn add(&mut self, tag: EhTag) {
+    pub fn add(&mut self, tag: Tag) {
         self[tag.0].push(tag.1);
     }
 
-    pub fn has(&mut self, tag: &EhTag) -> bool {
+    pub fn has(&mut self, tag: &Tag) -> bool {
         self[tag.0].iter().any(|x| x == &tag.1)
     }
 }
 
-impl Index<EhTagKind> for EhTagMap {
+impl Index<TagKind> for TagMap {
     type Output = Vec<String>;
 
-    fn index(&self, category: EhTagKind) -> &Self::Output {
+    fn index(&self, category: TagKind) -> &Self::Output {
         match category {
-            EhTagKind::Reclass => &self.reclass,
-            EhTagKind::Language => &self.language,
-            EhTagKind::Group => &self.group,
-            EhTagKind::Parody => &self.parody,
-            EhTagKind::Character => &self.character,
-            EhTagKind::Artist => &self.artist,
-            EhTagKind::Male => &self.male,
-            EhTagKind::Female => &self.female,
-            EhTagKind::Misc => &self.misc,
+            TagKind::Reclass => &self.reclass,
+            TagKind::Language => &self.language,
+            TagKind::Group => &self.group,
+            TagKind::Parody => &self.parody,
+            TagKind::Character => &self.character,
+            TagKind::Artist => &self.artist,
+            TagKind::Male => &self.male,
+            TagKind::Female => &self.female,
+            TagKind::Misc => &self.misc,
         }
     }
 }
 
-impl IndexMut<EhTagKind> for EhTagMap {
-    fn index_mut(&mut self, category: EhTagKind) -> &mut Self::Output {
+impl IndexMut<TagKind> for TagMap {
+    fn index_mut(&mut self, category: TagKind) -> &mut Self::Output {
         match category {
-            EhTagKind::Reclass => &mut self.reclass,
-            EhTagKind::Language => &mut self.language,
-            EhTagKind::Group => &mut self.group,
-            EhTagKind::Parody => &mut self.parody,
-            EhTagKind::Character => &mut self.character,
-            EhTagKind::Artist => &mut self.artist,
-            EhTagKind::Male => &mut self.male,
-            EhTagKind::Female => &mut self.female,
-            EhTagKind::Misc => &mut self.misc,
+            TagKind::Reclass => &mut self.reclass,
+            TagKind::Language => &mut self.language,
+            TagKind::Group => &mut self.group,
+            TagKind::Parody => &mut self.parody,
+            TagKind::Character => &mut self.character,
+            TagKind::Artist => &mut self.artist,
+            TagKind::Male => &mut self.male,
+            TagKind::Female => &mut self.female,
+            TagKind::Misc => &mut self.misc,
         }
     }
 }
 
-impl FromIterator<EhTag> for EhTagMap {
-    fn from_iter<I: IntoIterator<Item = EhTag>>(iter: I) -> Self {
-        let mut tags = EhTagMap::new();
+impl FromIterator<Tag> for TagMap {
+    fn from_iter<I: IntoIterator<Item = Tag>>(iter: I) -> Self {
+        let mut tags = TagMap::new();
         
         for tag in iter {
             tags.add(tag);
