@@ -41,31 +41,8 @@ fn percent_encode(from: &str) -> String {
 
 type Client = hyper::Client<HttpsConnector<HttpConnector>, Body>;
 
-fn get_bytes(client: &Client, dest: Uri)
-    -> impl Future<Output = Result<Vec<u8>, ErrorBox>> {
-    let task = client.get(dest);
-    async move {
-        let res = task.await?;
-        let bytes = hyper::body::to_bytes(res.into_body()).await?;
-
-        Ok(bytes.to_vec())
-    }
-}
-
-fn get_html(client: &Client, dest: Uri)
-    -> impl Future<Output = Result<Document, ErrorBox>> {
-    let task = client.get(dest);
-    async move {
-        let res = task.await?;
-        let bytes = hyper::body::to_bytes(res.into_body()).await?;
-        let file = str::from_utf8(&bytes)?;
-
-        Ok(Document::from(file))
-    }
-}
-
 pub struct Page<'a> {
-    client: &'a Client,
+    explorer: &'a Explorer,
     page: usize,
     results: Option<usize>,
     query: String,
@@ -75,9 +52,9 @@ pub struct Page<'a> {
 }
 
 impl<'a> Page<'a> {
-    pub(super) fn new(client: &'a Client, page: usize, query: String) -> Self {
+    pub(super) fn new(explorer: &'a Explorer, page: usize, query: String) -> Self {
         Self {
-            client,
+            explorer,
             page,
             results: None,
             query,
@@ -129,7 +106,9 @@ impl<'a> Stream for Page<'a> {
         let _self = self.get_mut();
 
         if _self.task.is_none() {
-            _self.task = Some(Box::pin(get_html(_self.client, _self.uri()?)));
+            _self.task = Some(
+                Box::pin(_self.explorer.get_html(_self.uri()?))
+            );
         }
 
         if let Some(ref mut task) = _self.task {
@@ -171,18 +150,44 @@ impl Explorer {
         }
     }
 
-    pub fn search(&self, keyword: &str) -> Page<'_> {
-        Page::new(&self.client, 0, format!("f_search={}", percent_encode(keyword)))
+    pub(super) fn get_bytes(&self, dest: Uri)
+        -> impl Future<Output = Result<Vec<u8>, ErrorBox>> {
+        let task = self.client.get(dest);
+        async move {
+            let res = task.await?;
+            let bytes = hyper::body::to_bytes(res.into_body()).await?;
+    
+            Ok(bytes.to_vec())
+        }
+    }
+    
+    pub(super) fn get_html(&self, dest: Uri)
+        -> impl Future<Output = Result<Document, ErrorBox>> {
+        let task = self.client.get(dest);
+        async move {
+            let res = task.await?;
+            let bytes = hyper::body::to_bytes(res.into_body()).await?;
+            let file = str::from_utf8(&bytes)?;
+    
+            Ok(Document::from(file))
+        }
     }
 
-    // FIXME: this can't parse articles with offensive for everyone flag
+    pub fn search(&self, keyword: &str) -> Page<'_> {
+        Page::new(self, 0, format!("f_search={}", percent_encode(keyword)))
+    }
+
+    // FIXME: this can't parse articles where 'offensive for everyone' flag is set
     pub fn article_from_path(&self, path: &str)
         -> impl Future<Output = Result<Article, ErrorBox>> {
-        let client = self.client.clone(); // it seems cloning client is cheap
-        let path = path.to_owned();
+        // // every client.get() clones itself internally; cloning client seems to be cheap
+        // let _self = self.clone();
+        // let path = path.to_owned();
+
+        let task = self.get_html(format!("{}?hc=1", path).parse().unwrap());
 
         async move {
-            let doc = get_html(&client, format!("{}?hc=1", path).parse()?).await?;
+            let doc = task.await?;
             let mut article = parser::article(&doc)?;
 
             let mut vec = parser::image_list(&doc)?;
@@ -191,16 +196,18 @@ impl Explorer {
             const IMAGES_PER_PAGE: usize = 40;
             let page_len = (article.length - 1) / IMAGES_PER_PAGE + 1;
 
-            // TODO: this could be done async
-            for i in 1..page_len {
-                let doc = get_html(
-                    &client,
-                    format!("{}?p={}", path, i).parse()?
-                ).await?;
+            // TODO: i'd really not like to clone self;
+            // there should be a better way
+            //
+            // // TODO: this could be done async
+            // for i in 1..page_len {
+            //     let doc = _self.get_html(
+            //         format!("{}?p={}", path, i).parse()?
+            //     ).await?;
 
-                let mut vec = parser::image_list(&doc)?;
-                article.images.append(&mut vec);
-            }
+            //     let mut vec = parser::image_list(&doc)?;
+            //     article.images.append(&mut vec);
+            // }
 
             Ok(article)
         }
@@ -211,24 +218,26 @@ impl Explorer {
         self.article_from_path(&pending.path)
     }
 
-    pub fn save_images(&self, article: Article)
-        -> impl Future<Output = Result<Vec<Vec<u8>>, ErrorBox>> {
-        let client = self.client.clone();
+    // TODO
+    //
+    // pub fn save_images(&self, article: Article)
+    //     -> impl Future<Output = Result<Vec<Vec<u8>>, ErrorBox>> {
+    //     let client = self.client.clone();
 
-        async move {
-            let mut res = Vec::new();
+    //     async move {
+    //         let mut res = Vec::new();
 
-            for path in &article.images {
-                let doc = get_html(&client, path.parse()?).await?;
-                let path = parser::image(&doc)?;
+    //         for path in &article.images {
+    //             let doc = get_html(&client, path.parse()?).await?;
+    //             let path = parser::image(&doc)?;
 
-                let image = get_bytes(&client, path.parse()?).await?;
-                res.push(image);
-            }
+    //             let image = get_bytes(&client, path.parse()?).await?;
+    //             res.push(image);
+    //         }
 
-            Ok(res)
-        }
-    }
+    //         Ok(res)
+    //     }
+    // }
 }
 
 #[cfg(test)]
@@ -251,31 +260,4 @@ mod tests {
         // this takes too long...
         // let images = explorer.save_images(article).await.unwrap();
     }
-
-    /*
-    async fn ideal() -> Result<(), Box<dyn Error>> {
-        let explorer = Explorer::new().await?;
-
-        let search = explorer.search("artist:hota.");
-
-        tokio::spawn!(async move {
-            while let Some(page) = search.try_next().await? {
-                for pending in page.iter() {
-                    // println!("{}", pending.title());
-                    // let article = pending.load_into().await?;
-                    // assert!(article.tags().has("artist:hota."));
-                }
-            }
-        }).await?;
-
-        let article = explorer.article_from_path("/g/1556174/cfe385099d/").await?;
-        assert_eq!(
-            article.title(), 
-            "(C97) [Bad Mushrooms (Chicke III, 4why)] \
-            Nibun no Yuudou | 2등분의 유혹 \
-            (Gotoubun no Hanayome) [Korean] [Team Edge]"
-        );
-        
-    }
-    */
 }

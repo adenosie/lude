@@ -17,8 +17,8 @@ pub fn search_results(doc: &Document) -> Result<usize, Box<dyn Error>> {
         .nth(0).unwrap()
         .first_child().unwrap()
         .as_text().unwrap() // this would be like "Showing 608,394 results"
-        .split_ascii_whitespace()
-        .nth(1).unwrap()
+        .strip_prefix("Showing ").unwrap()
+        .strip_suffix(" results").unwrap()
         .replace(',', "")
         .parse::<usize>()?)
 }
