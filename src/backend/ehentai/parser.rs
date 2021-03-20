@@ -7,8 +7,8 @@ use std::num::ParseIntError;
 use select::document::Document;
 use select::node::Node;
 use select::predicate::{Predicate, Attr, Class, Name};
-use super::article::{ArticleKind, PendingArticle, Score, Comment, Article};
-use super::tag::{ParseTagError, TagKind, Tag, TagMap};
+use super::article::{DraftMeta, ArticleMeta, Vote, Comment};
+use super::tag::{ParseTagError, TagKind, Tag, TagMap, ArticleKind};
 
 // take a document for an article list,
 // return total count of results of the list
@@ -19,14 +19,14 @@ pub fn search_results(doc: &Document) -> Result<usize, Box<dyn Error>> {
         .as_text().unwrap() // this would be like "Showing 608,394 results"
         .strip_prefix("Showing ").unwrap()
         .strip_suffix(" results").unwrap()
-        .replace(',', "")
+        .replace(',', "") // rust's parse() doesn't understand thousands separators
         .parse::<usize>()?)
 }
 
 // take a document for a list page (e.g. search result),
 // return the list of the articles in the document
 pub fn article_list(doc: &Document)
-    -> Result<Option<Vec<PendingArticle>>, Box<dyn Error>> {
+    -> Result<Option<Vec<DraftMeta>>, Box<dyn Error>> {
     let table = doc
         .find(Name("table").and(Class("gltc")))
         .nth(0);
@@ -127,7 +127,7 @@ pub fn article_list(doc: &Document)
             (uploader, length)
         };
 
-        list.push(PendingArticle {
+        list.push(DraftMeta {
             kind,
             thumb,
             posted,
@@ -146,8 +146,8 @@ pub fn article_list(doc: &Document)
 //
 // NOTE: this function DOES NOT parse the image list. call parse_image_list() 
 // and change the article data accordingly to get the list of images.
-pub fn article(doc: &Document)
-    -> Result<Article, Box<dyn Error>> {
+pub fn article(doc: &Document, path: String)
+    -> Result<ArticleMeta, Box<dyn Error>> {
     let (title, original_title) = {
         let mut iter = doc.find(Attr("id", "gd2")).nth(0).unwrap().children();
         
@@ -291,16 +291,12 @@ pub fn article(doc: &Document)
         tags
     };
 
-    // parse comments; .c1 is a class each comment node belongs to
-    let comments = doc
-        .find(Class("c1"))
-        .map(|node| comment(&node))
-        .collect::<Result<_, _>>()?;
-
-    Ok(Article {
+    Ok(ArticleMeta {
+        path,
         title,
         original_title,
         kind,
+        thumb: String::new(), // TODO
         uploader,
         posted,
         parent,
@@ -313,12 +309,11 @@ pub fn article(doc: &Document)
         rating_count,
         rating,
         tags,
-        images: Vec::new(),
-        comments,
     })
 }
 
 pub fn comments(doc: &Document) -> Result<Vec<Comment>, Box<dyn Error>> {
+    // parse comments; .c1 is a class each comment node belongs to
     doc.find(Class("c1")).map(|node| comment(&node)).collect()
 }
 
@@ -377,7 +372,7 @@ fn comment(node: &Node) -> Result<Comment, Box<dyn Error>> {
         (posted, writer)
     };
 
-    let score = if right.is(Class("c4")) {
+    let vote = if right.is(Class("c4")) {
         None
     } else {
         let text = right
@@ -395,14 +390,14 @@ fn comment(node: &Node) -> Result<Comment, Box<dyn Error>> {
             Ok((vote[..pos].to_owned(), parse_prefixed(&vote[(pos + 1)..])?))
         }
 
-        let omitted_voters = votes
+        let omitted = votes
             .last_child().unwrap()
             .as_text()
             .and_then(|text| text.strip_prefix(", and "))
             .and_then(|text| text.strip_suffix(" more..."))
             .map_or(Ok(0), |text| text.parse())?;
 
-        let votes = {
+        let voters = {
             let mut list = Vec::new();
 
             let base = votes
@@ -426,10 +421,10 @@ fn comment(node: &Node) -> Result<Comment, Box<dyn Error>> {
             list
         };
 
-        Some(Score {
+        Some(Vote {
             score,
-            votes,
-            omitted_voters
+            voters,
+            omitted
         })
     };
 
@@ -449,7 +444,7 @@ fn comment(node: &Node) -> Result<Comment, Box<dyn Error>> {
     Ok(Comment {
         posted,
         edited,
-        score,
+        vote,
         writer,
         content
     })
@@ -463,7 +458,7 @@ pub fn image_list(doc: &Document)
     -> Result<Vec<String>, Box<dyn Error>> {
     let mut images = Vec::new();
     
-    // is finding from id faster? i could just find by class...
+    // is finding from id faster? i can just find by class as well...
     let list = doc.find(Attr("id", "gdt")).nth(0).unwrap();
 
     for node in list.children() {
@@ -472,18 +467,19 @@ pub fn image_list(doc: &Document)
             continue;
         }
 
-        let path = node
+        let link = node
             .first_child().unwrap()
             .first_child().unwrap()
             .attr("href").unwrap()
             .to_string();
 
-        images.push(path);
+        images.push(link);
     }
     
     Ok(images)
 }
 
+// get the actual path to image
 pub fn image(doc: &Document)
     -> Result<String, Box<dyn Error>> {
     Ok(

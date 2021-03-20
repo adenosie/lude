@@ -14,8 +14,9 @@ use hyper::client::connect::HttpConnector;
 use detour::HttpsConnector;
 use select::document::Document;
 
-use super::article::{Article, ArticleKind, PendingArticle};
-use super::tag::{TagMap, TagKind};
+use super::article::{Article, Draft};
+use super::page::Page;
+use super::tag::{TagMap, TagKind, ArticleKind};
 use super::parser;
 
 type ErrorBox = Box<dyn Error>;
@@ -40,97 +41,6 @@ fn percent_encode(from: &str) -> String {
 }
 
 type Client = hyper::Client<HttpsConnector<HttpConnector>, Body>;
-
-pub struct Page<'a> {
-    explorer: &'a Explorer,
-    page: usize,
-    results: Option<usize>,
-    query: String,
-
-    // what a long type...
-    task: Option<Pin<Box<dyn Future<Output = Result<Document, ErrorBox>>>>>
-}
-
-impl<'a> Page<'a> {
-    pub(super) fn new(explorer: &'a Explorer, page: usize, query: String) -> Self {
-        Self {
-            explorer,
-            page,
-            results: None,
-            query,
-            task: None
-        }
-    }
-
-    fn uri(&self) -> Result<Uri, impl Error> {
-        Uri::builder()
-            .scheme("https")
-            .authority("e-hentai.org")
-            .path_and_query(format!("?page={}&{}", self.page, self.query))
-            .build()
-    }
-
-    // number of found search results
-    pub fn results(&self) -> Option<usize> {
-        self.results
-    }
-
-    pub fn len(&self) -> Option<usize> {
-        const ARTICLES_PER_PAGE: usize = 25;
-
-        // self.results must not be 0
-        self.results.map(|n| (n - 1) / ARTICLES_PER_PAGE + 1)
-    }
-
-    pub fn page(&self) -> usize {
-        self.page
-    }
-
-    // Stream doesn't provide nth() nor overloading skip()
-    pub fn skip(mut self, n: usize) -> Self {
-        self.page += n;
-        self.task = None; // do i have to reset?
-        self
-    }
-}
-
-impl<'a> Stream for Page<'a> {
-    type Item = Result<Vec<PendingArticle>, ErrorBox>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>)
-        -> Poll<Option<Self::Item>> {
-        // if self.len().filter(|len| len <= &self.page).is_some() {
-        //     return Poll::Ready(None);
-        // }
-
-        let _self = self.get_mut();
-
-        if _self.task.is_none() {
-            _self.task = Some(
-                Box::pin(_self.explorer.get_html(_self.uri()?))
-            );
-        }
-
-        if let Some(ref mut task) = _self.task {
-            task.as_mut().poll(cx).map(|res| {
-                _self.task = None;
-
-                res.map_or_else(|e| Some(Err(e)), |doc| {
-                    _self.page += 1;
-                    match parser::search_results(&doc) {
-                        Ok(n) => _self.results = Some(n),
-                        Err(e) => return Some(Err(e))
-                    }
-
-                    parser::article_list(&doc).transpose()
-                })
-            })
-        } else {
-            // compile error if commented out
-            unreachable!()
-        }
-    }
-}
 
 pub struct Explorer {
     client: Client
@@ -177,47 +87,6 @@ impl Explorer {
         Page::new(self, 0, format!("f_search={}", percent_encode(keyword)))
     }
 
-    // FIXME: this can't parse articles where 'offensive for everyone' flag is set
-    pub fn article_from_path(&self, path: &str)
-        -> impl Future<Output = Result<Article, ErrorBox>> {
-        // // every client.get() clones itself internally; cloning client seems to be cheap
-        // let _self = self.clone();
-        // let path = path.to_owned();
-
-        let task = self.get_html(format!("{}?hc=1", path).parse().unwrap());
-
-        async move {
-            let doc = task.await?;
-            let mut article = parser::article(&doc)?;
-
-            let mut vec = parser::image_list(&doc)?;
-            article.images.append(&mut vec);
-
-            const IMAGES_PER_PAGE: usize = 40;
-            let page_len = (article.length - 1) / IMAGES_PER_PAGE + 1;
-
-            // TODO: i'd really not like to clone self;
-            // there should be a better way
-            //
-            // // TODO: this could be done async
-            // for i in 1..page_len {
-            //     let doc = _self.get_html(
-            //         format!("{}?p={}", path, i).parse()?
-            //     ).await?;
-
-            //     let mut vec = parser::image_list(&doc)?;
-            //     article.images.append(&mut vec);
-            // }
-
-            Ok(article)
-        }
-    }
-
-    pub fn article(&self, pending: PendingArticle)
-        -> impl Future<Output = Result<Article, ErrorBox>> {
-        self.article_from_path(&pending.path)
-    }
-
     // TODO
     //
     // pub fn save_images(&self, article: Article)
@@ -251,8 +120,10 @@ mod tests {
         let mut page = explorer.search("language:korean").skip(1).take(2);
 
         while let Some(mut list) = page.try_next().await.unwrap() {
-            list.iter().for_each(|pend| println!("{}", pend.title));
-            let article = explorer.article(list.pop().unwrap()).await.unwrap();
+            for draft in list.into_iter().take(3) {
+                let article = draft.load().await.unwrap();
+                println!("{} pages", article.meta().length);
+            }
         }
 
         // let article = explorer.article(list.pop().unwrap()).await.unwrap();

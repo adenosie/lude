@@ -5,122 +5,211 @@
 use std::fmt;
 use std::str::FromStr;
 use std::error::Error;
-use super::tag::TagMap;
+use std::future::Future;
+use select::document::Document;
 
-pub enum ArticleKind {
-    Doujinshi,
-    Manga,
-    ArtistCG,
-    GameCG,
-    Western,
-    NonH,
-    ImageSet,
-    Cosplay,
-    AsianPorn,
-    Misc,
-    Private
+use super::tag::{ArticleKind, TagMap};
+use super::explorer::Explorer;
+use super::parser;
+
+type ErrorBox = Box<dyn std::error::Error>;
+
+#[derive(Clone)]
+pub struct DraftMeta {
+    pub kind: ArticleKind,
+    pub thumb: String,
+    pub posted: String,
+    pub path: String,
+    pub title: String,
+    pub tags: TagMap,
+    pub uploader: String,
+    pub length: usize,
 }
 
-#[derive(Debug)]
-pub struct ParseArticleKindError();
+pub struct Draft<'a> {
+    explorer: &'a Explorer,
+    meta: DraftMeta,
+}
 
-impl fmt::Display for ParseArticleKindError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Failed to format gallery type")
+impl<'a> Draft<'a> {
+    pub(super) fn new(explorer: &'a Explorer, meta: DraftMeta) -> Self {
+        Self {
+            explorer,
+            meta,
+        }
     }
-}
 
-impl Error for ParseArticleKindError {
+    pub fn meta(&self) -> &DraftMeta {
+        &self.meta
+    }
 
-}
-
-impl FromStr for ArticleKind {
-    type Err = ParseArticleKindError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "Doujinshi" => Ok(ArticleKind::Doujinshi),
-            "Manga" => Ok(ArticleKind::Manga),
-            "Artist CG" => Ok(ArticleKind::ArtistCG),
-            "Game CG" => Ok(ArticleKind::GameCG),
-            "Western" => Ok(ArticleKind::Western),
-            "Non-H" => Ok(ArticleKind::NonH),
-            "Image Set" => Ok(ArticleKind::ImageSet),
-            "Cosplay" => Ok(ArticleKind::Cosplay),
-            "Asian Porn" => Ok(ArticleKind::AsianPorn),
-            "Misc" => Ok(ArticleKind::Misc),
-            "Private" => Ok(ArticleKind::Private),
-            _ => Err(ParseArticleKindError())
+    pub fn load(self) -> impl Future<Output = Result<Article<'a>, ErrorBox>> + 'a {
+        async move {
+            let doc = self.explorer.get_html(self.meta.path.parse()?).await?;
+            Article::from_html(self.explorer, &doc, self.meta.path)
         }
     }
 }
 
-impl fmt::Display for ArticleKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            ArticleKind::Doujinshi => write!(f, "Doujinshi"),
-            ArticleKind::Manga => write!(f, "Manga"),
-            ArticleKind::ArtistCG => write!(f, "Artist CG"),
-            ArticleKind::GameCG => write!(f, "Game CG"),
-            ArticleKind::Western => write!(f, "Western"),
-            ArticleKind::NonH => write!(f, "Non-H"),
-            ArticleKind::ImageSet => write!(f, "Image Set"),
-            ArticleKind::Cosplay => write!(f, "Cosplay"),
-            ArticleKind::AsianPorn => write!(f, "Asian Porn"),
-            ArticleKind::Misc => write!(f, "Misc"),
-            ArticleKind::Private => write!(f, "Private"),
-        }
-    }
+
+#[derive(Clone)]
+pub struct ArticleMeta {
+    pub path: String,
+
+    pub title: String,
+    pub original_title: String,
+
+    pub kind: ArticleKind,
+    pub thumb: String,
+    pub uploader: String,
+    pub posted: String,
+    pub parent: String,
+    pub visible: bool, // 'offensive for everyone' flag
+    pub language: String,
+    pub translated: bool,
+    pub file_size: String,
+    pub length: usize,
+    pub favorited: usize,
+    pub rating_count: usize,
+    pub rating: f64,
+
+    pub tags: TagMap,
 }
 
-pub struct PendingArticle {
-    pub(crate) kind: ArticleKind,
-    pub(crate) thumb: String,
-    pub(crate) posted: String,
-    pub(crate) path: String,
-    pub(crate) title: String,
-    pub(crate) tags: TagMap,
-    pub(crate) uploader: String,
-    pub(crate) length: usize,
-}
-
-pub struct Score {
-    pub score: i64,
-    pub votes: Vec<(String, i64)>,
-    pub omitted_voters: usize,
+pub(super) struct Vote {
+    pub(super) score: i64,
+    pub(super) voters: Vec<(String, i64)>,
+    pub(super) omitted: usize,
 }
 
 pub struct Comment {
-    pub(crate) posted: String,
-    pub(crate) edited: Option<String>,
+    pub(super) posted: String,
+    pub(super) edited: Option<String>,
 
     // None if uploader comment
-    pub(crate) score: Option<Score>,
+    pub(super) vote: Option<Vote>,
 
-    pub(crate) writer: String,
-    pub(crate) content: String,
+    pub(super) writer: String,
+    pub(super) content: String,
 }
 
-pub struct Article {
-    pub(crate) title: String,
-    pub(crate) original_title: String,
+impl Comment {
+    pub fn score(&self) -> Option<i64> {
+        self.vote.as_ref().map(|v| v.score)
+    }
 
-    pub(crate) kind: ArticleKind,
-    // pub(crate) thumb: String,
-    pub(crate) uploader: String,
-    pub(crate) posted: String,
-    pub(crate) parent: String,
-    pub(crate) visible: bool, // what is this for?
-    pub(crate) language: String,
-    pub(crate) translated: bool,
-    pub(crate) file_size: String,
-    pub(crate) length: usize,
-    pub(crate) favorited: usize,
-    pub(crate) rating_count: usize,
-    pub(crate) rating: f64,
+    pub fn voters(&self) -> Option<&[(String, i64)]> {
+        self.vote.as_ref().map(|v| v.voters.as_slice())
+    }
 
-    pub(crate) tags: TagMap,
+    pub fn omitted_voter(&self) -> Option<usize> {
+        self.vote.as_ref().map(|v| v.omitted)
+    }
+}
 
-    pub(crate) images: Vec<String>,
-    pub(crate) comments: Vec<Comment>
+struct Image {
+    // path to gallery viewer toward this image
+    // (e.g. https://e-hentai.org/s/432a4627a6/1623741-8)
+    link: String,
+
+    // path to actual image file
+    // (it's very long; usually form of https://*.*.hath.network/*)
+    path: Option<String>,
+    data: Option<Vec<u8>>,
+
+    // NOTE: this is tricky, because what we see as 'preview images' of an article
+    // is actually made up by chopping one big image to 100 pixels wide.
+    // why do this? to reduce the number of requests.
+    // preview: Option<Vec<u8>>,
+}
+
+impl Image {
+    fn new(link: String) -> Self {
+        Self {
+            link,
+            path: None,
+            data: None
+        }
+    }
+}
+
+pub struct Article<'a> {
+    explorer: &'a Explorer,
+
+    meta: ArticleMeta,
+    images: Vec<Image>,
+    comments: Vec<Comment>,
+}
+
+impl<'a> Article<'a> {
+    pub(super) fn from_html(explorer: &'a Explorer, doc: &Document, path: String)
+        -> Result<Self, ErrorBox> {
+        Ok(Self {
+            explorer,
+            meta: parser::article(doc, path)?,
+            images: parser::image_list(doc)?
+                .into_iter()
+                .map(Image::new)
+                .collect(),
+            comments: parser::comments(doc)?,
+        })
+    }
+
+    pub fn meta(&self) -> &ArticleMeta {
+        &self.meta
+    }
+
+    async fn load_image_list(&mut self) -> Result<(), ErrorBox> {
+        const IMAGES_PER_PAGE: usize = 40;
+        let page_len = 1 + (self.meta.length - 1) / IMAGES_PER_PAGE;
+
+        // start from 1 because we've already parsed page 0
+        for i in 1..page_len {
+            let doc = self.explorer.get_html(
+                format!("{}?p={}", self.meta.path, i).parse()?
+            ).await?;
+
+            let mut list = parser::image_list(&doc)?
+                .into_iter()
+                .map(Image::new)
+                .collect();
+
+            self.images.append(&mut list);
+        }
+
+        Ok(())
+    }
+
+    async fn load_image(&mut self, index: usize) -> Result<(), ErrorBox> {
+        if index >= self.meta.length {
+            return Ok(());
+        }
+
+        if index >= self.images.len() {
+            self.load_image_list().await?;
+        }
+
+        let image = &mut self.images[index];
+
+        if image.data.is_none() {
+            let doc = self.explorer.get_html(image.link.parse()?).await?;
+            let path = parser::image(&doc)?;
+            image.data = Some(self.explorer.get_bytes(path.parse()?).await?);
+            image.path = Some(path);
+        }
+
+        Ok(())
+    }
+
+    pub fn image(&self, index: usize) -> Option<&[u8]> {
+        self.images.get(index).and_then(|i| i.data.as_ref().map(Vec::as_slice))
+    }
+
+    async fn load_all_comments(&mut self) -> Result<(), ErrorBox> {
+        let path = format!("{}?hc=1", self.meta.path).parse()?;
+        let doc = self.explorer.get_html(path).await?;
+        self.comments = parser::comments(&doc)?;
+
+        Ok(())
+    }
 }

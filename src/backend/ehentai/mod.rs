@@ -3,10 +3,11 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 mod tag;
+mod page;
 mod article;
 mod parser;
 mod explorer;
 
-pub use tag::{ParseTagError, TagKind, Tag, TagMap};
-pub use article::{ArticleKind, PendingArticle, Comment, Article};
+pub use tag::{ParseTagError, TagKind, Tag, TagMap, ArticleKind};
+pub use article::{Draft, Comment, Article};
 pub use explorer::{Explorer};

@@ -8,6 +8,71 @@ use std::iter::{FromIterator, IntoIterator};
 use std::error::Error;
 use std::ops::{Index, IndexMut};
 
+#[derive(Copy, Clone)]
+pub enum ArticleKind {
+    Doujinshi,
+    Manga,
+    ArtistCG,
+    GameCG,
+    Western,
+    NonH,
+    ImageSet,
+    Cosplay,
+    AsianPorn,
+    Misc,
+    Private
+}
+
+#[derive(Debug)]
+pub struct ParseArticleKindError();
+
+impl fmt::Display for ParseArticleKindError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Failed to format gallery type")
+    }
+}
+
+impl Error for ParseArticleKindError {}
+
+impl FromStr for ArticleKind {
+    type Err = ParseArticleKindError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Doujinshi" => Ok(ArticleKind::Doujinshi),
+            "Manga" => Ok(ArticleKind::Manga),
+            "Artist CG" => Ok(ArticleKind::ArtistCG),
+            "Game CG" => Ok(ArticleKind::GameCG),
+            "Western" => Ok(ArticleKind::Western),
+            "Non-H" => Ok(ArticleKind::NonH),
+            "Image Set" => Ok(ArticleKind::ImageSet),
+            "Cosplay" => Ok(ArticleKind::Cosplay),
+            "Asian Porn" => Ok(ArticleKind::AsianPorn),
+            "Misc" => Ok(ArticleKind::Misc),
+            "Private" => Ok(ArticleKind::Private),
+            _ => Err(ParseArticleKindError())
+        }
+    }
+}
+
+impl fmt::Display for ArticleKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ArticleKind::Doujinshi => write!(f, "Doujinshi"),
+            ArticleKind::Manga => write!(f, "Manga"),
+            ArticleKind::ArtistCG => write!(f, "Artist CG"),
+            ArticleKind::GameCG => write!(f, "Game CG"),
+            ArticleKind::Western => write!(f, "Western"),
+            ArticleKind::NonH => write!(f, "Non-H"),
+            ArticleKind::ImageSet => write!(f, "Image Set"),
+            ArticleKind::Cosplay => write!(f, "Cosplay"),
+            ArticleKind::AsianPorn => write!(f, "Asian Porn"),
+            ArticleKind::Misc => write!(f, "Misc"),
+            ArticleKind::Private => write!(f, "Private"),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct ParseTagError();
 
@@ -17,9 +82,7 @@ impl fmt::Display for ParseTagError {
     }
 }
 
-impl Error for ParseTagError {
-
-}
+impl Error for ParseTagError {}
 
 #[derive(Clone, Copy)]
 pub enum TagKind {
@@ -111,10 +174,10 @@ impl fmt::Display for Tag {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct TagMap {
     // all is (probably) sorted alphabetically
-    // (because the webpage gives tags so)
+    // (just because the webpage gives tags so)
     language: Vec<String>,
     group: Vec<String>,
     parody: Vec<String>,
