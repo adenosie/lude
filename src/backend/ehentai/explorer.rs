@@ -47,40 +47,31 @@ pub struct Explorer {
 }
 
 impl Explorer {
-    pub fn new()
-        -> impl Future<Output = Result<Explorer, ErrorBox>> {
-        async {
-            let https = HttpsConnector::new();
-            let client = hyper::Client::builder()
-                .build::<_, Body>(https);
+    pub async fn new() -> Result<Explorer, ErrorBox> {
+        let https = HttpsConnector::new();
+        let client = hyper::Client::builder()
+            .build::<_, Body>(https);
 
-            Ok(Self {
-                client,
-            })
-        }
+        Ok(Self {
+            client,
+        })
     }
 
-    pub(super) fn get_bytes(&self, dest: Uri)
-        -> impl Future<Output = Result<Vec<u8>, ErrorBox>> {
-        let task = self.client.get(dest);
-        async move {
-            let res = task.await?;
-            let bytes = hyper::body::to_bytes(res.into_body()).await?;
+    pub(super) async fn get_bytes(&self, dest: Uri)
+        -> Result<Vec<u8>, ErrorBox> {
+        let res = self.client.get(dest).await?;
+        let bytes = hyper::body::to_bytes(res.into_body()).await?;
     
-            Ok(bytes.to_vec())
-        }
+        Ok(bytes.to_vec())
     }
     
-    pub(super) fn get_html(&self, dest: Uri)
-        -> impl Future<Output = Result<Document, ErrorBox>> {
-        let task = self.client.get(dest);
-        async move {
-            let res = task.await?;
-            let bytes = hyper::body::to_bytes(res.into_body()).await?;
-            let file = str::from_utf8(&bytes)?;
+    pub(super) async fn get_html(&self, dest: Uri)
+        -> Result<Document, ErrorBox> {
+        let res = self.client.get(dest).await?;
+        let bytes = hyper::body::to_bytes(res.into_body()).await?;
+        let file = str::from_utf8(&bytes)?;
     
-            Ok(Document::from(file))
-        }
+        Ok(Document::from(file))
     }
 
     pub fn search(&self, keyword: &str) -> Page<'_> {

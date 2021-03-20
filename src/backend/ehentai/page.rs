@@ -21,7 +21,7 @@ pub struct Page<'a> {
     query: String,
 
     // what a long type...
-    task: Option<Pin<Box<dyn Future<Output = Result<Document, ErrorBox>>>>>
+    task: Option<Pin<Box<dyn Future<Output = Result<Document, ErrorBox>> + 'a>>>
 }
 
 impl<'a> Page<'a> {
