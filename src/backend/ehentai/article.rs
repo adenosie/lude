@@ -43,11 +43,9 @@ impl<'a> Draft<'a> {
         &self.meta
     }
 
-    pub fn load(self) -> impl Future<Output = Result<Article<'a>, ErrorBox>> + 'a {
-        async move {
-            let doc = self.explorer.get_html(self.meta.path.parse()?).await?;
-            Article::from_html(self.explorer, &doc, self.meta.path)
-        }
+    pub async fn load(self) -> Result<Article<'a>, ErrorBox> {
+        let doc = self.explorer.get_html(self.meta.path.parse()?).await?;
+        Article::from_html(self.explorer, &doc, self.meta.path)
     }
 }
 
@@ -159,6 +157,10 @@ impl<'a> Article<'a> {
         &self.meta
     }
 
+    pub fn image(&self, index: usize) -> Option<&[u8]> {
+        self.images.get(index).and_then(|i| i.data.as_ref().map(Vec::as_slice))
+    }
+
     async fn load_image_list(&mut self) -> Result<(), ErrorBox> {
         const IMAGES_PER_PAGE: usize = 40;
         let page_len = 1 + (self.meta.length - 1) / IMAGES_PER_PAGE;
@@ -180,7 +182,7 @@ impl<'a> Article<'a> {
         Ok(())
     }
 
-    async fn load_image(&mut self, index: usize) -> Result<(), ErrorBox> {
+    pub async fn load_image(&mut self, index: usize) -> Result<(), ErrorBox> {
         if index >= self.meta.length {
             return Ok(());
         }
@@ -201,11 +203,7 @@ impl<'a> Article<'a> {
         Ok(())
     }
 
-    pub fn image(&self, index: usize) -> Option<&[u8]> {
-        self.images.get(index).and_then(|i| i.data.as_ref().map(Vec::as_slice))
-    }
-
-    async fn load_all_comments(&mut self) -> Result<(), ErrorBox> {
+    pub async fn load_all_comments(&mut self) -> Result<(), ErrorBox> {
         let path = format!("{}?hc=1", self.meta.path).parse()?;
         let doc = self.explorer.get_html(path).await?;
         self.comments = parser::comments(&doc)?;
