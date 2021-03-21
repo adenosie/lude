@@ -84,8 +84,9 @@ mod tests {
 
     #[tokio::test]
     async fn search() {
-        let explorer = Explorer::new().await.unwrap();
+        use tokio_stream::StreamExt;
 
+        let explorer = Explorer::new().await.unwrap();
         let mut page = explorer.search("language:korean").take(3);
 
         while let Some(list) = page.try_next().await.unwrap() {
