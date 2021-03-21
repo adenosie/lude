@@ -2,10 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use std::fmt;
-use std::str::FromStr;
-use std::error::Error;
-use std::future::Future;
 use select::document::Document;
 
 use super::tag::{ArticleKind, TagMap};
@@ -14,7 +10,7 @@ use super::parser;
 
 type ErrorBox = Box<dyn std::error::Error>;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct DraftMeta {
     pub kind: ArticleKind,
     pub thumb: String,
@@ -50,7 +46,7 @@ impl<'a> Draft<'a> {
 }
 
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ArticleMeta {
     pub path: String,
 
@@ -61,7 +57,7 @@ pub struct ArticleMeta {
     pub thumb: String,
     pub uploader: String,
     pub posted: String,
-    pub parent: String,
+    pub parent: Option<String>,
     pub visible: bool, // 'offensive for everyone' flag
     pub language: String,
     pub translated: bool,
@@ -74,12 +70,14 @@ pub struct ArticleMeta {
     pub tags: TagMap,
 }
 
+#[derive(Debug)]
 pub(super) struct Vote {
     pub(super) score: i64,
     pub(super) voters: Vec<(String, i64)>,
     pub(super) omitted: usize,
 }
 
+#[derive(Debug)]
 pub struct Comment {
     pub(super) posted: String,
     pub(super) edited: Option<String>,
@@ -116,8 +114,9 @@ struct Image {
     data: Option<Vec<u8>>,
 
     // NOTE: this is tricky, because what we see as 'preview images' of an article
-    // is actually made up by chopping one big image to 100 pixels wide.
-    // why do this? to reduce the number of requests.
+    // is actually made up by chopping one big image to 100 pixels by width.
+    // why do this? optimisation. by utilising one big image, and not many small images,
+    // the number of requests are reduced, and this resolves networking bottleneck.
     // preview: Option<Vec<u8>>,
 }
 
@@ -159,6 +158,10 @@ impl<'a> Article<'a> {
 
     pub fn image(&self, index: usize) -> Option<&[u8]> {
         self.images.get(index).and_then(|i| i.data.as_ref().map(Vec::as_slice))
+    }
+
+    pub fn comments(&self) -> &[Comment] {
+        self.comments.as_slice()
     }
 
     async fn load_image_list(&mut self) -> Result<(), ErrorBox> {

@@ -157,7 +157,18 @@ pub fn article(doc: &Document, path: String)
         (title, orig)
     };
 
-    // TODO: parse thumbnail (though it's identical with pending article's thumbnail)
+    let thumb = {
+        let text = doc
+            .find(Attr("id", "gd1"))
+            .nth(0).unwrap()
+            .first_child().unwrap()
+            .attr("style").unwrap();
+
+        let begin = text.find("url(").unwrap();
+        let end = text.find(')').unwrap();
+
+        text[(begin + "url(".len())..end].to_owned()
+    };
 
     let kind = doc
         .find(Attr("id", "gdc"))
@@ -192,13 +203,10 @@ pub fn article(doc: &Document, path: String)
             .last_child().unwrap()
             .first_child().unwrap();
 
-        if let Some("None") = node.as_text() {
-            // no parent; node.text() would be "None"
-            String::new()
-        } else {
-            // get a link to the parent
-            node.attr("href").unwrap()
-                .to_string()
+        match node.as_text() {
+            Some("None") => None,
+            None => Some(node.attr("href").unwrap().to_string()),
+            _ => unreachable!()
         }
     };
 
@@ -214,8 +222,15 @@ pub fn article(doc: &Document, path: String)
             .next().unwrap()
             .last_child().unwrap();
 
-        let language = node.first_child().unwrap().text();
-        let translated = node.last_child().unwrap().name().is_some();
+        let language = node
+            .first_child().unwrap()
+            .as_text().unwrap()
+            .trim()
+            .to_owned();
+
+        let translated = node
+            .last_child().unwrap()
+            .name().is_some();
 
         (language, translated)
     };
@@ -296,7 +311,7 @@ pub fn article(doc: &Document, path: String)
         title,
         original_title,
         kind,
-        thumb: String::new(), // TODO
+        thumb,
         uploader,
         posted,
         parent,

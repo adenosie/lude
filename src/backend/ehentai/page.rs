@@ -2,7 +2,6 @@ use std::future::Future;
 use std::task::{Context, Poll};
 use std::error::Error;
 use std::pin::Pin;
-use std::fmt;
 
 use tokio_stream::Stream;
 use hyper::Uri;

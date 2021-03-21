@@ -8,7 +8,7 @@ use std::iter::{FromIterator, IntoIterator};
 use std::error::Error;
 use std::ops::{Index, IndexMut};
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum ArticleKind {
     Doujinshi,
     Manga,
@@ -174,7 +174,7 @@ impl fmt::Display for Tag {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct TagMap {
     // all is (probably) sorted alphabetically
     // (just because the webpage gives tags so)

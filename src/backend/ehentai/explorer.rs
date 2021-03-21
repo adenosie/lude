@@ -2,24 +2,17 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use std::error::Error;
-use std::future::Future;
-use std::pin::Pin;
-use std::task::{Poll, Context};
 use std::str;
 
-use tokio_stream::{Stream, StreamExt};
 use hyper::{Uri, Body};
 use hyper::client::connect::HttpConnector;
 use detour::HttpsConnector;
 use select::document::Document;
 
-use super::article::{Article, Draft};
+use super::article::Article;
 use super::page::Page;
-use super::tag::{TagMap, TagKind, ArticleKind};
-use super::parser;
 
-type ErrorBox = Box<dyn Error>;
+type ErrorBox = Box<dyn std::error::Error>;
 
 fn percent_encode(from: &str) -> String {
     let mut res = String::new();
@@ -78,26 +71,11 @@ impl Explorer {
         Page::new(self, 0, format!("f_search={}", percent_encode(keyword)))
     }
 
-    // TODO
-    //
-    // pub fn save_images(&self, article: Article)
-    //     -> impl Future<Output = Result<Vec<Vec<u8>>, ErrorBox>> {
-    //     let client = self.client.clone();
-
-    //     async move {
-    //         let mut res = Vec::new();
-
-    //         for path in &article.images {
-    //             let doc = get_html(&client, path.parse()?).await?;
-    //             let path = parser::image(&doc)?;
-
-    //             let image = get_bytes(&client, path.parse()?).await?;
-    //             res.push(image);
-    //         }
-
-    //         Ok(res)
-    //     }
-    // }
+    pub async fn article_from_path(&self, path: &str)
+        -> Result<Article<'_>, ErrorBox> {
+        let doc = self.get_html(path.parse()?).await?;
+        Article::from_html(self, &doc, path.to_owned())
+    }
 }
 
 #[cfg(test)]
@@ -106,20 +84,16 @@ mod tests {
 
     #[tokio::test]
     async fn search() {
-        let mut explorer = Explorer::new().await.unwrap();
+        let explorer = Explorer::new().await.unwrap();
 
-        let mut page = explorer.search("language:korean").skip(1).take(2);
+        let mut page = explorer.search("language:korean").take(3);
 
-        while let Some(mut list) = page.try_next().await.unwrap() {
+        while let Some(list) = page.try_next().await.unwrap() {
             for draft in list.into_iter().take(3) {
                 let article = draft.load().await.unwrap();
-                println!("{} pages", article.meta().length);
+                println!("{:#?}", article.meta());
+                // println!("{:#?}", article.comments());
             }
         }
-
-        // let article = explorer.article(list.pop().unwrap()).await.unwrap();
-
-        // this takes too long...
-        // let images = explorer.save_images(article).await.unwrap();
     }
 }
