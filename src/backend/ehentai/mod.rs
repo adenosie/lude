@@ -11,3 +11,6 @@ mod explorer;
 pub use tag::{ParseTagError, TagKind, Tag, TagMap, ArticleKind};
 pub use article::{Draft, Comment, Article};
 pub use explorer::{Explorer};
+
+#[cfg(test)]
+mod tests;

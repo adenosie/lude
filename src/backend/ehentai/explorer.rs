@@ -77,24 +77,3 @@ impl Explorer {
         Article::from_html(self, &doc, path.to_owned())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn search() {
-        use tokio_stream::StreamExt;
-
-        let explorer = Explorer::new().await.unwrap();
-        let mut page = explorer.search("language:korean").take(3);
-
-        while let Some(list) = page.try_next().await.unwrap() {
-            for draft in list.into_iter().take(3) {
-                let article = draft.load().await.unwrap();
-                println!("{:#?}", article.meta());
-                // println!("{:#?}", article.comments());
-            }
-        }
-    }
-}
