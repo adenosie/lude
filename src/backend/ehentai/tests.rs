@@ -43,11 +43,11 @@ async fn download() {
     // download shits
     path.push("0.jpg");
     for i in 0..article.meta().length {
-        article.load_image(i).await.unwrap();
+        let image = article.load_image(i).await.unwrap();
 
         path.set_file_name(&format!("{}.jpg", i));
         let mut file = File::create(path.as_path()).unwrap();
 
-        file.write_all(article.image(i).unwrap()).unwrap();
+        file.write_all(&image).unwrap();
     }
 }

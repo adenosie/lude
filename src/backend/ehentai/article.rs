@@ -104,38 +104,11 @@ impl Comment {
     }
 }
 
-struct Image {
-    // path to gallery viewer toward this image
-    // (e.g. https://e-hentai.org/s/432a4627a6/1623741-8)
-    link: String,
-
-    // path to actual image file
-    // (it's very long; usually form of https://*.*.hath.network/*)
-    path: Option<String>,
-    data: Option<Vec<u8>>,
-
-    // NOTE: this is tricky, because what we see as 'preview images' of an article
-    // is actually made up by chopping one big image to 100 pixels by width.
-    // why do this? optimisation. by utilising one big image, and not many small images,
-    // the number of requests are reduced, and this resolves networking bottleneck.
-    // preview: Option<Vec<u8>>,
-}
-
-impl Image {
-    fn new(link: String) -> Self {
-        Self {
-            link,
-            path: None,
-            data: None
-        }
-    }
-}
-
 pub struct Article<'a> {
     explorer: &'a Explorer,
 
     meta: ArticleMeta,
-    images: Vec<Image>,
+    links: Vec<String>,
     comments: Vec<Comment>,
 }
 
@@ -145,10 +118,7 @@ impl<'a> Article<'a> {
         Ok(Self {
             explorer,
             meta: parser::article(doc, path)?,
-            images: parser::image_list(doc)?
-                .into_iter()
-                .map(Image::new)
-                .collect(),
+            links: parser::image_list(doc)?,
             comments: parser::comments(doc)?,
         })
     }
@@ -157,16 +127,12 @@ impl<'a> Article<'a> {
         &self.meta
     }
 
-    pub fn image(&self, index: usize) -> Option<&[u8]> {
-        self.images.get(index).and_then(|i| i.data.as_ref().map(Vec::as_slice))
-    }
-
     // it's O(1) to random access
     pub fn comments(&self) -> slice::Iter<'_, Comment> {
         self.comments.iter()
     }
 
-    async fn load_image_list(&mut self) -> Result<(), ErrorBox> {
+    pub async fn load_image_list(&mut self) -> Result<(), ErrorBox> {
         const IMAGES_PER_PAGE: usize = 40;
         let page_len = 1 + (self.meta.length - 1) / IMAGES_PER_PAGE;
 
@@ -176,36 +142,23 @@ impl<'a> Article<'a> {
                 format!("{}?p={}", self.meta.path, i).parse()?
             ).await?;
 
-            let mut list = parser::image_list(&doc)?
-                .into_iter()
-                .map(Image::new)
-                .collect();
-
-            self.images.append(&mut list);
+            self.links.extend(parser::image_list(&doc)?);
         }
 
         Ok(())
     }
 
-    pub async fn load_image(&mut self, index: usize) -> Result<(), ErrorBox> {
-        if index >= self.meta.length {
-            return Ok(());
+    pub async fn load_image(&self, index: usize) -> Result<Vec<u8>, ErrorBox> {
+        // is this really the best?
+        if index >= self.links.len() {
+            panic!(":P"); // TODO
         }
 
-        if index >= self.images.len() {
-            self.load_image_list().await?;
-        }
+        let doc = self.explorer.get_html(self.links[index].parse()?).await?;
+        let path = parser::image(&doc)?;
 
-        let image = &mut self.images[index];
-
-        if image.data.is_none() {
-            let doc = self.explorer.get_html(image.link.parse()?).await?;
-            let path = parser::image(&doc)?;
-            image.data = Some(self.explorer.get_bytes(path.parse()?).await?);
-            image.path = Some(path);
-        }
-
-        Ok(())
+        let data = self.explorer.get_bytes(path.parse()?).await?;
+        Ok(data)
     }
 
     pub async fn load_all_comments(&mut self) -> Result<(), ErrorBox> {
