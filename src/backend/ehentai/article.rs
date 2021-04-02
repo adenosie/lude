@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+use std::slice;
 use select::document::Document;
 
 use super::tag::{ArticleKind, TagMap};
@@ -94,8 +95,8 @@ impl Comment {
         self.vote.as_ref().map(|v| v.score)
     }
 
-    pub fn voters(&self) -> Option<&[(String, i64)]> {
-        self.vote.as_ref().map(|v| v.voters.as_slice())
+    pub fn voters(&self) -> Option<slice::Iter<'_, (String, i64)>> {
+        self.vote.as_ref().map(|v| v.voters.iter())
     }
 
     pub fn omitted_voter(&self) -> Option<usize> {
@@ -160,8 +161,9 @@ impl<'a> Article<'a> {
         self.images.get(index).and_then(|i| i.data.as_ref().map(Vec::as_slice))
     }
 
-    pub fn comments(&self) -> &[Comment] {
-        self.comments.as_slice()
+    // it's O(1) to random access
+    pub fn comments(&self) -> slice::Iter<'_, Comment> {
+        self.comments.iter()
     }
 
     async fn load_image_list(&mut self) -> Result<(), ErrorBox> {
