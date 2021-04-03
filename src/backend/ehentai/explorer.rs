@@ -71,9 +71,8 @@ impl Explorer {
         Page::new(self, 0, format!("f_search={}", percent_encode(keyword)))
     }
 
-    pub async fn article_from_path(&self, path: &str)
+    pub async fn article_from_path(&self, path: String)
         -> Result<Article<'_>, ErrorBox> {
-        let doc = self.get_html(path.parse()?).await?;
-        Article::from_html(self, &doc, path.to_owned())
+        Article::new(self, path).await
     }
 }

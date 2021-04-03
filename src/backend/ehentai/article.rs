@@ -3,7 +3,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use std::slice;
-use select::document::Document;
 
 use super::tag::{ArticleKind, TagMap};
 use super::explorer::Explorer;
@@ -41,8 +40,7 @@ impl<'a> Draft<'a> {
     }
 
     pub async fn load(self) -> Result<Article<'a>, ErrorBox> {
-        let doc = self.explorer.get_html(self.meta.path.parse()?).await?;
-        Article::from_html(self.explorer, &doc, self.meta.path)
+        Article::new(self.explorer, self.meta.path).await
     }
 }
 
@@ -113,13 +111,14 @@ pub struct Article<'a> {
 }
 
 impl<'a> Article<'a> {
-    pub(super) fn from_html(explorer: &'a Explorer, doc: &Document, path: String)
-        -> Result<Self, ErrorBox> {
+    pub(super) async fn new(explorer: &'a Explorer, path: String)
+        -> Result<Article<'a>, ErrorBox> {
+        let doc = explorer.get_html(path.parse()?).await?;
         Ok(Self {
             explorer,
-            meta: parser::article(doc, path)?,
-            links: parser::image_list(doc)?,
-            comments: parser::comments(doc)?,
+            meta: parser::article(&doc, path)?,
+            links: parser::image_list(&doc)?,
+            comments: parser::comments(&doc)?,
         })
     }
 
