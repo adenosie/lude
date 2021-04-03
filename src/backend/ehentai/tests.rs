@@ -31,6 +31,7 @@ async fn download() {
     let list = page.try_next().await.unwrap().unwrap();
     let draft = list.into_iter().nth(0).unwrap();
     let mut article = draft.load().await.unwrap();
+    article.load_image_list().await.unwrap();
 
     let mut path = PathBuf::from("./tests/download/");
 
