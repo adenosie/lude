@@ -13,26 +13,6 @@ use super::article::Article;
 use super::page::Page;
 
 type ErrorBox = Box<dyn std::error::Error>;
-
-fn percent_encode(from: &str) -> String {
-    let mut res = String::new();
-
-    for byte in from.as_bytes() {
-        match byte {
-            // unreserved characters (MUST NOT be encoded)
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' 
-                | b'-' | b'_' | b'.' | b'~' => {
-                res.push(*byte as char);
-            },
-            _ => {
-                res.push_str(&format!("%{:02X}", *byte));
-            }
-        }
-    }
-
-    res
-}
-
 type Client = hyper::Client<HttpsConnector<HttpConnector>, Body>;
 
 pub struct Explorer {
@@ -68,7 +48,7 @@ impl Explorer {
     }
 
     pub fn search(&self, keyword: &str) -> Page<'_> {
-        Page::new(self, 0, format!("f_search={}", percent_encode(keyword)))
+        Page::new(self, 0, keyword)
     }
 
     pub async fn article_from_path(&self, path: String)
