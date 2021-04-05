@@ -28,11 +28,46 @@ async fn light() {
     file.write_all(&first).unwrap();
 }
 
+#[tokio::test]
+async fn sequencial() {
+    use std::fs;
+    use std::fs::File;
+    use std::io::Write;
+    use std::path::PathBuf;
+
+    let url = String::from("https://e-hentai.org/g/1335995/ba04527f3d/");
+
+    let explorer = Explorer::new().await.unwrap();
+    let mut article = explorer.article_from_path(url).await.unwrap();
+    article.load_image_list().await.unwrap();
+
+    let mut path = PathBuf::from("./tests/sequencial/");
+
+    // clean the directory
+    for entry in fs::read_dir(path.as_path()).unwrap() {
+        let entry = entry.unwrap();
+        fs::remove_file(entry.path()).unwrap();
+    }
+
+    // download shits
+    path.push("0.jpg");
+
+    let len = article.meta().length;
+    for i in 0..len {
+        let image = article.load_image(i).await.unwrap();
+
+        path.set_file_name(&format!("{}.jpg", i));
+        let mut file = File::create(path.as_path()).unwrap();
+
+        file.write_all(&image).unwrap();
+    }
+}
+
 // FIXME
 #[tokio::test]
-async fn heavy() {
+async fn parallel() {
     use tokio::time::{sleep, Duration};
-    use tokio::sync::Mutex;
+    use tokio::sync::mpsc;
     use std::sync::Arc;
     use std::fs;
     use std::fs::File;
@@ -40,7 +75,7 @@ async fn heavy() {
     use std::path::PathBuf;
 
     // load article infos 
-    let url = String::from("https://e-hentai.org/g/1556174/cfe385099d/");
+    let url = String::from("https://e-hentai.org/g/1335995/ba04527f3d/");
 
     let explorer = Explorer::new().await.unwrap();
 
@@ -49,43 +84,26 @@ async fn heavy() {
     let len = article.meta().length;
 
     // load images parallelly
-    let mut v = Vec::new();
-    v.resize_with(len, || Mutex::new(Vec::new()));
-    let v = Arc::new(v);
+    let (tx, mut rx) = mpsc::channel(len);
 
     let article = Arc::new(article);
 
-    let mut joiner = Vec::new();
     for i in 0..len {
         // sleep a bit to prevent ban
-        sleep(Duration::from_millis(300)).await;
+        sleep(Duration::from_millis(500)).await;
 
+        let tx = tx.clone();
         let article = Arc::clone(&article);
-        let v = Arc::clone(&v);
 
-        let handle = tokio::spawn(async move {
+        tokio::spawn(async move {
             println!("downloading {}th image..", i);
             let image = article.load_image(i).await.unwrap();
-            println!("got {}th image", i);
-            let mut v = v[i].lock().await;
-            v.extend(image);
+            tx.send((i, image)).await.unwrap();
             println!("saved {}th image!", i);
         });
-
-        joiner.push(handle);
     }
 
-    for handle in joiner {
-        handle.await.unwrap();
-    }
-
-    let v = Arc::try_unwrap(v).unwrap();
-    let images: Vec<_> = v
-        .into_iter()
-        .map(Mutex::into_inner)
-        .collect();
-
-    let mut path = PathBuf::from("./tests/heavy/");
+    let mut path = PathBuf::from("./tests/parallel/");
 
     // clean the directory
     for entry in fs::read_dir(path.as_path()).unwrap() {
@@ -96,9 +114,9 @@ async fn heavy() {
     // save shits
     path.push("0.jpg");
     
-    for i in 0..article.meta().length {
+    while let Some((i, image)) = rx.recv().await {
         path.set_file_name(&format!("{}.jpg", i));
         let mut file = File::create(path.as_path()).unwrap();
-        file.write_all(&images[i]).unwrap();
+        file.write_all(&image).unwrap();
     }
 }
