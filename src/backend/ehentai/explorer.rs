@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use std::str;
+use std::sync::Arc;
 
 use hyper::{Uri, Body};
 use hyper::client::connect::HttpConnector;
@@ -20,14 +21,14 @@ pub struct Explorer {
 }
 
 impl Explorer {
-    pub async fn new() -> Result<Explorer, ErrorBox> {
+    pub async fn new() -> Result<Arc<Explorer>, ErrorBox> {
         let https = HttpsConnector::new();
         let client = hyper::Client::builder()
             .build::<_, Body>(https);
 
-        Ok(Self {
+        Ok(Arc::new(Self {
             client,
-        })
+        }))
     }
 
     pub(super) async fn get_bytes(&self, dest: Uri)
@@ -47,12 +48,12 @@ impl Explorer {
         Ok(Document::from(file))
     }
 
-    pub fn search(&self, keyword: &str) -> Page<'_> {
-        Page::new(self, 0, keyword)
+    pub fn search(self: &Arc<Self>, keyword: &str) -> Page {
+        Page::new(self.clone(), 0, keyword)
     }
 
-    pub async fn article_from_path(&self, path: String)
-        -> Result<Article<'_>, ErrorBox> {
-        Article::new(self, path).await
+    pub async fn article_from_path(self: &Arc<Self>, path: String)
+        -> Result<Article, ErrorBox> {
+        Article::new(self.clone(), path).await
     }
 }

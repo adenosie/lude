@@ -2,14 +2,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use std::future::Future;
-use std::task::{Context, Poll};
+use std::sync::Arc;
 use std::error::Error;
-use std::pin::Pin;
-
-use tokio_stream::Stream;
 use hyper::Uri;
-use select::document::Document;
 
 use super::explorer::Explorer;
 use super::article::Draft;
@@ -36,26 +31,24 @@ fn percent_encode(from: &str) -> String {
     res
 }
 
-pub struct Page<'a> {
-    explorer: &'a Explorer,
+pub struct Page {
+    explorer: Arc<Explorer>,
     page: usize,
     results: Option<usize>,
+    limit: Option<usize>,
     query: String,
-
-    // what a long type...
-    task: Option<Pin<Box<dyn Future<Output = Result<Document, ErrorBox>> + 'a>>>
 }
 
-impl<'a> Page<'a> {
-    pub(super) fn new(explorer: &'a Explorer, page: usize, keyword: &str) -> Self {
+impl Page {
+    pub(super) fn new(explorer: Arc<Explorer>, page: usize, keyword: &str) -> Self {
         let query = format!("f_search={}", percent_encode(keyword));
 
         Self {
             explorer,
             page,
             results: None,
+            limit: None,
             query,
-            task: None
         }
     }
 
@@ -75,64 +68,49 @@ impl<'a> Page<'a> {
     pub fn len(&self) -> Option<usize> {
         const ARTICLES_PER_PAGE: usize = 25;
 
-        // self.results must not be 0
-        self.results.map(|n| (n - 1) / ARTICLES_PER_PAGE + 1)
+        if let Some(lim) = self.limit {
+            Some(lim)
+        } else if let Some(n) = self.results {
+            // self.results must not be 0
+            Some((n - 1) / ARTICLES_PER_PAGE + 1)
+        } else {
+            None
+        }
     }
 
     pub fn page(&self) -> usize {
         self.page
     }
 
-    // Stream doesn't provide nth() nor overloading skip()
+    // both Iterator and Stream suck, so i have to mimic them by myself...
     pub fn skip(mut self, n: usize) -> Self {
         self.page += n;
-        self.task = None; // do i have to reset?
         self
     }
-}
 
-impl<'a> Stream for Page<'a> {
-    type Item = Result<Vec<Draft<'a>>, ErrorBox>;
+    pub fn take(mut self, n: usize) -> Self {
+        self.limit = Some(self.page + n);
+        self
+    }
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>)
-        -> Poll<Option<Self::Item>> {
-        // if self.len().filter(|len| len <= &self.page).is_some() {
-        //     return Poll::Ready(None);
-        // }
-
-        let _self = self.get_mut();
-
-        if _self.task.is_none() {
-            _self.task = Some(
-                Box::pin(_self.explorer.get_html(_self.uri()?))
-            );
+    pub async fn next(&mut self) -> Result<Option<Vec<Draft>>, ErrorBox> {
+        if self.len().filter(|len| len <= &self.page).is_some() {
+            return Ok(None);
         }
 
-        if let Some(ref mut task) = _self.task {
-            task.as_mut().poll(cx).map(|res| {
-                _self.task = None;
+        let doc = self.explorer.get_html(self.uri()?).await?;
+        self.page += 1;
+        self.results = Some(parser::search_results(&doc)?);
 
-                res.map_or_else(|e| Some(Err(e)), |doc| {
-                    _self.page += 1;
-                    match parser::search_results(&doc) {
-                        Ok(n) => _self.results = Some(n),
-                        Err(e) => return Some(Err(e))
-                    }
-
-                    match parser::article_list(&doc) {
-                        Ok(Some(vec)) => Some(Ok(vec
-                                .into_iter()
-                                .map(|meta| Draft::new(_self.explorer, meta))
-                                .collect())),
-                        Ok(None) => None,
-                        Err(e) => Some(Err(e))
-                    }
-                })
-            })
+        if let Some(list) = parser::article_list(&doc)? {
+            let list = list
+                .into_iter()
+                .map(|meta| Draft::new(self.explorer.clone(), meta))
+                .collect();
+            
+            Ok(Some(list))
         } else {
-            // compile error if commented out
-            unreachable!()
+            Ok(None)
         }
     }
 }
-

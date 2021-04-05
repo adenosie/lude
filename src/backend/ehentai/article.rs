@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use std::slice;
+use std::sync::Arc;
 
 use super::tag::{ArticleKind, TagMap};
 use super::explorer::Explorer;
@@ -22,13 +23,13 @@ pub struct DraftMeta {
     pub length: usize,
 }
 
-pub struct Draft<'a> {
-    explorer: &'a Explorer,
+pub struct Draft {
+    explorer: Arc<Explorer>,
     meta: DraftMeta,
 }
 
-impl<'a> Draft<'a> {
-    pub(super) fn new(explorer: &'a Explorer, meta: DraftMeta) -> Self {
+impl Draft {
+    pub(super) fn new(explorer: Arc<Explorer>, meta: DraftMeta) -> Self {
         Self {
             explorer,
             meta,
@@ -39,7 +40,7 @@ impl<'a> Draft<'a> {
         &self.meta
     }
 
-    pub async fn load(self) -> Result<Article<'a>, ErrorBox> {
+    pub async fn load(self) -> Result<Article, ErrorBox> {
         Article::new(self.explorer, self.meta.path).await
     }
 }
@@ -102,17 +103,17 @@ impl Comment {
     }
 }
 
-pub struct Article<'a> {
-    explorer: &'a Explorer,
+pub struct Article {
+    explorer: Arc<Explorer>,
 
     meta: ArticleMeta,
     links: Vec<String>,
     comments: Vec<Comment>,
 }
 
-impl<'a> Article<'a> {
-    pub(super) async fn new(explorer: &'a Explorer, path: String)
-        -> Result<Article<'a>, ErrorBox> {
+impl Article {
+    pub(super) async fn new(explorer: Arc<Explorer>, path: String)
+        -> Result<Article, ErrorBox> {
         let doc = explorer.get_html(path.parse()?).await?;
         Ok(Self {
             explorer,
@@ -132,6 +133,10 @@ impl<'a> Article<'a> {
     }
 
     pub async fn load_image_list(&mut self) -> Result<(), ErrorBox> {
+        if self.links.len() == self.meta().length {
+            return Ok(());
+        }
+
         const IMAGES_PER_PAGE: usize = 40;
         let page_len = 1 + (self.meta.length - 1) / IMAGES_PER_PAGE;
 
@@ -153,8 +158,9 @@ impl<'a> Article<'a> {
             panic!(":P"); // TODO
         }
 
-        let doc = self.explorer.get_html(self.links[index].parse()?).await?;
-        let path = parser::image(&doc)?;
+        let path = parser::image(
+            &self.explorer.get_html(self.links[index].parse()?).await?
+        )?;
 
         let data = self.explorer.get_bytes(path.parse()?).await?;
         Ok(data)
