@@ -29,7 +29,7 @@ async fn light() {
 }
 
 #[tokio::test]
-async fn sequencial() {
+async fn sequential() {
     use std::fs;
     use std::fs::File;
     use std::io::Write;
@@ -41,7 +41,7 @@ async fn sequencial() {
     let mut article = explorer.article_from_path(url).await.unwrap();
     article.load_image_list().await.unwrap();
 
-    let mut path = PathBuf::from("./tests/sequencial/");
+    let mut path = PathBuf::from("./tests/sequential/");
 
     // clean the directory
     for entry in fs::read_dir(path.as_path()).unwrap() {
