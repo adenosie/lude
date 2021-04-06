@@ -54,7 +54,9 @@ async fn sequential() {
 
     let len = article.meta().length;
     for i in 0..len {
+        println!("downloading {}th image...", i);
         let image = article.load_image(i).await.unwrap();
+        println!("got {}th image!", i);
 
         path.set_file_name(&format!("{}.jpg", i));
         let mut file = File::create(path.as_path()).unwrap();
@@ -89,8 +91,7 @@ async fn parallel() {
     let article = Arc::new(article);
 
     for i in 0..len {
-        // sleep a bit to prevent ban
-        sleep(Duration::from_millis(500)).await;
+        sleep(Duration::from_millis(100)).await;
 
         let tx = tx.clone();
         let article = Arc::clone(&article);
@@ -98,8 +99,8 @@ async fn parallel() {
         tokio::spawn(async move {
             println!("downloading {}th image..", i);
             let image = article.load_image(i).await.unwrap();
-            tx.send((i, image)).await.unwrap();
             println!("saved {}th image!", i);
+            tx.send((i, image)).await.unwrap();
         });
     }
 
@@ -111,10 +112,15 @@ async fn parallel() {
         fs::remove_file(entry.path()).unwrap();
     }
 
+    println!("cleaned directory, waiting for images...");
+
     // save shits
     path.push("0.jpg");
-    
-    while let Some((i, image)) = rx.recv().await {
+
+    for _ in 0..len {
+        let (i, image) = rx.recv().await.unwrap();
+        println!("received {}th image", i);
+
         path.set_file_name(&format!("{}.jpg", i));
         let mut file = File::create(path.as_path()).unwrap();
         file.write_all(&image).unwrap();

@@ -162,6 +162,7 @@ impl Article {
             &self.explorer.get_html(self.links[index].parse()?).await?
         )?;
 
+        // this never returns if self is in another thread... why?
         let data = self.explorer.get_bytes(path.parse()?).await?;
         Ok(data)
     }
