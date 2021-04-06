@@ -1,5 +1,5 @@
 [package]
-name = "libhentai"
+name = "lude"
 version = "0.1.0"
 authors = ["Adenosie <adenosiez@gmail.com>"]
 edition = "2018"
@@ -12,8 +12,6 @@ members = [
 
 [dependencies]
 tokio = { version = "1", features = ["rt", "net", "macros"] }
-tokio-stream = "0.1"
-tokio-native-tls = "0.3"
 
 hyper = { version = "0.14", features = ["client", "tcp", "http1", "http2"] }
 detour = { path = "src/detour" }

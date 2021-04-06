@@ -1,11 +1,12 @@
-# libhentai
+# lude
 
-Very few things work right now. Go and come again later!
+This project is in very early stage; More awesome features will come soon. Keep watching me!
 
 ## Todo List
 
-- [x] Bypassing DPI
-- [x] Provide decent networking frontend with bypassing censorships
+- [x] Provide decent networking
+    - [x] Bypassing DPI censorships
+    - [x] Asynchronous, concurrent, parallel or whatever
 - Downloading hentais from:
     - [x] E-hentai
     - [ ] Exhentai
