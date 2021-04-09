@@ -14,14 +14,15 @@ async fn search() {
     }
 }
 
+const URL: &'static str = "https://e-hentai.org/g/1088955/4464b39d07/";
+
 #[tokio::test]
 async fn light() {
     use std::fs::File;
     use std::io::Write;
 
-    let url = String::from("https://e-hentai.org/g/1556174/cfe385099d/");
     let explorer = Explorer::new().await.unwrap();
-    let article = explorer.article_from_path(url).await.unwrap();
+    let article = explorer.article_from_path(URL.into()).await.unwrap();
     
     let first = article.load_image(0).await.unwrap();
     let mut file = File::create("./tests/light.jpg").unwrap();
@@ -35,10 +36,8 @@ async fn sequential() {
     use std::io::Write;
     use std::path::PathBuf;
 
-    let url = String::from("https://e-hentai.org/g/1335995/ba04527f3d/");
-
     let explorer = Explorer::new().await.unwrap();
-    let mut article = explorer.article_from_path(url).await.unwrap();
+    let mut article = explorer.article_from_path(URL.into()).await.unwrap();
     article.load_image_list().await.unwrap();
 
     let mut path = PathBuf::from("./tests/sequential/");
@@ -77,11 +76,9 @@ async fn parallel() {
     use std::path::PathBuf;
 
     // load article infos 
-    let url = String::from("https://e-hentai.org/g/1335995/ba04527f3d/");
-
     let explorer = Explorer::new().await.unwrap();
 
-    let mut article = explorer.article_from_path(url).await.unwrap();
+    let mut article = explorer.article_from_path(URL.into()).await.unwrap();
     article.load_image_list().await.unwrap();
     let len = article.meta().length;
 
