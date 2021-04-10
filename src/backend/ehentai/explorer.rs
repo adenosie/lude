@@ -5,11 +5,13 @@
 use std::str;
 use std::sync::Arc;
 
-use hyper::{Uri, Body};
+use tokio::sync::Mutex;
+use hyper::{Uri, Body, Request, Response};
 use hyper::client::connect::HttpConnector;
 use detour::HttpsConnector;
 use select::document::Document;
 
+use super::cookie::CookieStore;
 use super::article::Article;
 use super::page::Page;
 
@@ -17,7 +19,8 @@ type ErrorBox = Box<dyn std::error::Error>;
 type Client = hyper::Client<HttpsConnector<HttpConnector>, Body>;
 
 pub struct Explorer {
-    client: Client
+    client: Client,
+    cookies: Mutex<CookieStore>,
 }
 
 impl Explorer {
@@ -28,12 +31,36 @@ impl Explorer {
 
         Ok(Arc::new(Self {
             client,
+            cookies: Mutex::new(CookieStore::new()),
         }))
     }
 
-    pub(super) async fn get_bytes(&self, dest: Uri)
+    async fn get(&self, dest: Uri, mime: &str)
+        -> Result<Response<Body>, ErrorBox> {
+        let cookie = self.cookies
+            .lock().await
+            .bake(dest.host().unwrap());
+
+        let req = Request::get(dest)
+            .header("Content-Type", mime)
+            .header("Cookie", cookie)
+            .body(Body::empty())?;
+
+        let res = self.client.request(req).await?;
+
+        let mut cookie = self.cookies.lock().await;
+        res.headers()
+            .get_all("Set-Cookie")
+            .iter()
+            .map(|val| val.to_str().unwrap())
+            .for_each(|s| cookie.set(s));
+
+        Ok(res)
+    }
+
+    pub(super) async fn get_image(&self, dest: Uri)
         -> Result<Vec<u8>, ErrorBox> {
-        let res = self.client.get(dest).await?;
+        let res = self.get(dest, "image/*").await?;
         let bytes = hyper::body::to_bytes(res.into_body()).await?;
     
         Ok(bytes.to_vec())
@@ -41,7 +68,7 @@ impl Explorer {
     
     pub(super) async fn get_html(&self, dest: Uri)
         -> Result<Document, ErrorBox> {
-        let res = self.client.get(dest).await?;
+        let res = self.get(dest, "text/html").await?;
         let bytes = hyper::body::to_bytes(res.into_body()).await?;
         let file = str::from_utf8(&bytes)?;
     

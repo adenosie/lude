@@ -162,7 +162,7 @@ impl Article {
             &self.explorer.get_html(self.links[index].parse()?).await?
         )?;
 
-        let data = self.explorer.get_bytes(path.parse()?).await?;
+        let data = self.explorer.get_image(path.parse()?).await?;
         Ok(data)
     }
 
