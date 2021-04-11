@@ -5,7 +5,6 @@
 use std::str;
 use std::sync::Arc;
 
-use tokio::sync::Mutex;
 use hyper::{Uri, Body, Request, Response};
 use hyper::client::connect::HttpConnector;
 use detour::HttpsConnector;
@@ -20,7 +19,26 @@ type Client = hyper::Client<HttpsConnector<HttpConnector>, Body>;
 
 pub struct Explorer {
     client: Client,
-    cookies: Mutex<CookieStore>,
+    cookies: CookieStore,
+}
+
+fn percent_encode(from: &str) -> String {
+    let mut res = String::new();
+
+    for byte in from.as_bytes() {
+        match byte {
+            // unreserved characters (MUST NOT be encoded)
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' 
+                | b'-' | b'_' | b'.' | b'~' => {
+                res.push(*byte as char);
+            },
+            _ => {
+                res.push_str(&format!("%{:02X}", *byte));
+            }
+        }
+    }
+
+    res
 }
 
 impl Explorer {
@@ -31,14 +49,38 @@ impl Explorer {
 
         Ok(Arc::new(Self {
             client,
-            cookies: Mutex::new(CookieStore::new()),
+            cookies: CookieStore::new(),
         }))
+    }
+
+    pub async fn login(&mut self, username: &str, password: &str)
+        -> Result<bool, ErrorBox> {
+        const POST_DEST: &str = "https://forums.e-hentai.org/index.php?act=Login&CODE=01";
+
+        let form = format!(
+            "CookieDate=1&b=d&bt=1-1&UserName={}&PassWord={}&ipb_login_submit=Login%21",
+            percent_encode(username),
+            percent_encode(password)
+        );
+
+        let req = Request::post(POST_DEST)
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .header("Content-Length", form.len())
+            .body(form.into())?;
+
+        let res = self.client.request(req).await?;
+        res.headers()
+            .get_all("Set-Cookie")
+            .iter()
+            .map(|val| val.to_str().unwrap())
+            .for_each(|s| self.cookies.set(s));
+
+        Ok(self.cookies.get("ipb_pass_hash").is_some())
     }
 
     async fn get(&self, dest: Uri, mime: &str)
         -> Result<Response<Body>, ErrorBox> {
         let cookie = self.cookies
-            .lock().await
             .bake(dest.host().unwrap());
 
         let req = Request::get(dest)
@@ -47,14 +89,6 @@ impl Explorer {
             .body(Body::empty())?;
 
         let res = self.client.request(req).await?;
-
-        let mut cookie = self.cookies.lock().await;
-        res.headers()
-            .get_all("Set-Cookie")
-            .iter()
-            .map(|val| val.to_str().unwrap())
-            .for_each(|s| cookie.set(s));
-
         Ok(res)
     }
 
@@ -76,7 +110,7 @@ impl Explorer {
     }
 
     pub fn search(self: &Arc<Self>, keyword: &str) -> Page {
-        Page::new(self.clone(), 0, keyword)
+        Page::new(self.clone(), 0, &percent_encode(keyword))
     }
 
     pub async fn article_from_path(self: &Arc<Self>, path: String)

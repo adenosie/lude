@@ -59,4 +59,8 @@ impl CookieStore {
 
         res
     }
+
+    pub fn get(&self, key: &str) -> Option<&str> {
+        self.pairs.get(key).map(|c| c.value.as_str())
+    }
 }

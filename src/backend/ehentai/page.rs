@@ -12,25 +12,6 @@ use super::parser;
 
 type ErrorBox = Box<dyn Error>;
 
-fn percent_encode(from: &str) -> String {
-    let mut res = String::new();
-
-    for byte in from.as_bytes() {
-        match byte {
-            // unreserved characters (MUST NOT be encoded)
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' 
-                | b'-' | b'_' | b'.' | b'~' => {
-                res.push(*byte as char);
-            },
-            _ => {
-                res.push_str(&format!("%{:02X}", *byte));
-            }
-        }
-    }
-
-    res
-}
-
 pub struct Page {
     explorer: Arc<Explorer>,
     page: usize,
@@ -41,7 +22,7 @@ pub struct Page {
 
 impl Page {
     pub(super) fn new(explorer: Arc<Explorer>, page: usize, keyword: &str) -> Self {
-        let query = format!("f_search={}", percent_encode(keyword));
+        let query = format!("f_search={}", keyword);
 
         Self {
             explorer,
