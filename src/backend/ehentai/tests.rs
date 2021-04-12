@@ -2,7 +2,7 @@ use super::*;
 
 #[tokio::test]
 async fn search() {
-    let explorer = Explorer::new().await.unwrap();
+    let explorer = Explorer::new();
     let mut page = explorer.search("language:korean").take(3);
 
     while let Some(list) = page.next().await.unwrap() {
@@ -21,7 +21,7 @@ async fn light() {
     use std::fs::File;
     use std::io::Write;
 
-    let explorer = Explorer::new().await.unwrap();
+    let explorer = Explorer::new();
     let article = explorer.article_from_path(URL.into()).await.unwrap();
     
     let first = article.load_image(0).await.unwrap();
@@ -36,7 +36,7 @@ async fn sequential() {
     use std::io::Write;
     use std::path::PathBuf;
 
-    let explorer = Explorer::new().await.unwrap();
+    let explorer = Explorer::new();
     let mut article = explorer.article_from_path(URL.into()).await.unwrap();
     article.load_image_list().await.unwrap();
 
@@ -76,7 +76,7 @@ async fn parallel() {
     use std::path::PathBuf;
 
     // load article infos 
-    let explorer = Explorer::new().await.unwrap();
+    let explorer = Explorer::new();
 
     let mut article = explorer.article_from_path(URL.into()).await.unwrap();
     article.load_image_list().await.unwrap();

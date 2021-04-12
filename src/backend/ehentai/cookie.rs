@@ -35,7 +35,7 @@ impl CookieStore {
             .expect("Set-Cookie header doesn't have '='");
 
         let (key, val) = pair.split_at(delim);
-        let (key, val) = (key.trim(), val.trim());
+        let (key, val) = (key.trim(), val[1..].trim());
 
         // TODO
         // for av in line {

@@ -3,7 +3,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use std::str;
+use std::fmt;
 use std::sync::Arc;
+use std::error::Error;
 
 use hyper::{Uri, Body, Request, Response};
 use hyper::client::connect::HttpConnector;
@@ -14,13 +16,8 @@ use super::cookie::CookieStore;
 use super::article::Article;
 use super::page::Page;
 
-type ErrorBox = Box<dyn std::error::Error>;
+type ErrorBox = Box<dyn Error>;
 type Client = hyper::Client<HttpsConnector<HttpConnector>, Body>;
-
-pub struct Explorer {
-    client: Client,
-    cookies: CookieStore,
-}
 
 fn percent_encode(from: &str) -> String {
     let mut res = String::new();
@@ -41,41 +38,74 @@ fn percent_encode(from: &str) -> String {
     res
 }
 
+pub struct Explorer {
+    client: Client,
+    cookies: CookieStore,
+}
+
 impl Explorer {
-    pub async fn new() -> Result<Arc<Explorer>, ErrorBox> {
+    pub fn owned() -> Explorer {
         let https = HttpsConnector::new();
         let client = hyper::Client::builder()
             .build::<_, Body>(https);
 
-        Ok(Arc::new(Self {
+        let mut cookies = CookieStore::new();
+        cookies.set("nw=1");
+
+        Self {
             client,
-            cookies: CookieStore::new(),
-        }))
+            cookies,
+        }
     }
 
-    pub async fn login(&mut self, username: &str, password: &str)
-        -> Result<bool, ErrorBox> {
-        const POST_DEST: &str = "https://forums.e-hentai.org/index.php?act=Login&CODE=01";
+    pub fn new() -> Arc<Explorer> {
+        Arc::new(Explorer::owned())
+    }
 
-        let form = format!(
-            "CookieDate=1&b=d&bt=1-1&UserName={}&PassWord={}&ipb_login_submit=Login%21",
-            percent_encode(username),
-            percent_encode(password)
-        );
+    pub async fn login(username: &str, password: &str)
+        -> Result<Arc<Explorer>, ErrorBox> {
+        unimplemented!()
 
-        let req = Request::post(POST_DEST)
-            .header("Content-Type", "application/x-www-form-urlencoded")
-            .header("Content-Length", form.len())
-            .body(form.into())?;
+        // let mut _self = Explorer::owned();
 
-        let res = self.client.request(req).await?;
-        res.headers()
-            .get_all("Set-Cookie")
-            .iter()
-            .map(|val| val.to_str().unwrap())
-            .for_each(|s| self.cookies.set(s));
+        // const ORIGIN: &str = "https://forums.e-hentai.org";
+        // const REFERER: &str = "https://forums.e-hentai.org/index.php?act=Login&CODE=00";
+        // const POST_DEST: &str = "https://forums.e-hentai.org/index.php?act=Login&CODE=01";
 
-        Ok(self.cookies.get("ipb_pass_hash").is_some())
+        // let form = format!(
+        //     "CookieDate=1&UserName={}&PassWord={}&submit=Log%20me%20in",
+        //     percent_encode(username),
+        //     percent_encode(password)
+        // );
+
+        // let req = Request::post(POST_DEST)
+        //     .header("Connection", "keep-alive")
+        //     .header("Referer", REFERER)
+        //     .header("Content-Type", "application/x-www-form-urlencoded")
+        //     .header("Content-Length", form.len())
+        //     .body(form.into())?;
+
+        // let res = _self.client.request(req).await?;
+        // res.headers()
+        //     .get_all("Set-Cookie")
+        //     .iter()
+        //     .map(|val| val.to_str().unwrap())
+        //     .for_each(|s| _self.cookies.set(s));
+
+        // if _self.cookies.get("ipb_pass_hash").is_none() {
+        //     panic!("login failed!");
+        // }
+
+        // Ok(Arc::new(_self))
+    }
+
+    pub async fn with_cookies(member_id: &str, pass_hash: &str)
+        -> Arc<Explorer> {
+        let mut _self = Explorer::owned();
+        _self.cookies.set(&format!("ipb_member_id={}", member_id));
+        _self.cookies.set(&format!("ipb_pass_hash={}", pass_hash));
+
+        Ok(Arc::new(_self))
     }
 
     async fn get(&self, dest: Uri, mime: &str)
@@ -99,7 +129,7 @@ impl Explorer {
     
         Ok(bytes.to_vec())
     }
-    
+
     pub(super) async fn get_html(&self, dest: Uri)
         -> Result<Document, ErrorBox> {
         let res = self.get(dest, "text/html").await?;
