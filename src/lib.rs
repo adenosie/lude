@@ -5,6 +5,7 @@
 extern crate tokio;
 extern crate hyper;
 extern crate select;
+extern crate detour;
 
 mod backend;
 

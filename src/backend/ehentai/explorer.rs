@@ -105,7 +105,7 @@ impl Explorer {
         _self.cookies.set(&format!("ipb_member_id={}", member_id));
         _self.cookies.set(&format!("ipb_pass_hash={}", pass_hash));
 
-        Ok(Arc::new(_self))
+        Arc::new(_self)
     }
 
     async fn get(&self, dest: Uri, mime: &str)
