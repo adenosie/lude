@@ -6,14 +6,14 @@ use std::sync::Arc;
 use std::error::Error;
 use hyper::Uri;
 
-use super::explorer::Explorer;
+use super::client::Client;
 use super::article::Draft;
 use super::parser;
 
 type ErrorBox = Box<dyn Error>;
 
 pub struct Page {
-    explorer: Arc<Explorer>,
+    client: Arc<Client>,
     page: usize,
     results: Option<usize>,
     limit: Option<usize>,
@@ -21,11 +21,11 @@ pub struct Page {
 }
 
 impl Page {
-    pub(super) fn new(explorer: Arc<Explorer>, page: usize, keyword: &str) -> Self {
+    pub(super) fn new(client: Arc<Client>, page: usize, keyword: &str) -> Self {
         let query = format!("f_search={}", keyword);
 
         Self {
-            explorer,
+            client,
             page,
             results: None,
             limit: None,
@@ -79,14 +79,14 @@ impl Page {
             return Ok(None);
         }
 
-        let doc = self.explorer.get_html(self.uri()?).await?;
+        let doc = self.client.get_html(self.uri()?).await?;
         self.page += 1;
         self.results = Some(parser::search_results(&doc)?);
 
         if let Some(list) = parser::article_list(&doc)? {
             let list = list
                 .into_iter()
-                .map(|meta| Draft::new(self.explorer.clone(), meta))
+                .map(|meta| Draft::new(self.client.clone(), meta))
                 .collect();
             
             Ok(Some(list))

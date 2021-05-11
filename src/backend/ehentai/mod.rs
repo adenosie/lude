@@ -6,6 +6,7 @@ mod tag;
 mod page;
 mod article;
 mod parser;
+mod client;
 mod explorer;
 
 pub use tag::{ParseTagError, TagKind, Tag, TagMap, ArticleKind};

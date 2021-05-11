@@ -6,7 +6,7 @@ use std::slice;
 use std::sync::Arc;
 
 use super::tag::{ArticleKind, TagMap};
-use super::explorer::Explorer;
+use super::client::Client;
 use super::parser;
 
 type ErrorBox = Box<dyn std::error::Error>;
@@ -24,14 +24,14 @@ pub struct DraftMeta {
 }
 
 pub struct Draft {
-    explorer: Arc<Explorer>,
+    client: Arc<Client>,
     meta: DraftMeta,
 }
 
 impl Draft {
-    pub(super) fn new(explorer: Arc<Explorer>, meta: DraftMeta) -> Self {
+    pub(super) fn new(client: Arc<Client>, meta: DraftMeta) -> Self {
         Self {
-            explorer,
+            client,
             meta,
         }
     }
@@ -41,7 +41,7 @@ impl Draft {
     }
 
     pub async fn load(self) -> Result<Article, ErrorBox> {
-        Article::new(self.explorer, self.meta.path).await
+        Article::new(self.client, self.meta.path).await
     }
 }
 
@@ -104,7 +104,7 @@ impl Comment {
 }
 
 pub struct Article {
-    explorer: Arc<Explorer>,
+    client: Arc<Client>,
 
     meta: ArticleMeta,
     links: Vec<String>,
@@ -112,11 +112,11 @@ pub struct Article {
 }
 
 impl Article {
-    pub(super) async fn new(explorer: Arc<Explorer>, path: String)
+    pub(super) async fn new(client: Arc<Client>, path: String)
         -> Result<Article, ErrorBox> {
-        let doc = explorer.get_html(path.parse()?).await?;
+        let doc = client.get_html(path.parse()?).await?;
         Ok(Self {
-            explorer,
+            client,
             meta: parser::article(&doc, path)?,
             links: parser::image_list(&doc)?,
             comments: parser::comments(&doc)?,
@@ -142,7 +142,7 @@ impl Article {
 
         // start from 1 because we've already parsed page 0
         for i in 1..page_len {
-            let doc = self.explorer.get_html(
+            let doc = self.client.get_html(
                 format!("{}?p={}", self.meta.path, i).parse()?
             ).await?;
 
@@ -159,16 +159,16 @@ impl Article {
         }
 
         let path = parser::image(
-            &self.explorer.get_html(self.links[index].parse()?).await?
+            &self.client.get_html(self.links[index].parse()?).await?
         )?;
 
-        let data = self.explorer.get_image(path.parse()?).await?;
+        let data = self.client.get_image(path.parse()?).await?;
         Ok(data)
     }
 
     pub async fn load_all_comments(&mut self) -> Result<(), ErrorBox> {
         let path = format!("{}?hc=1", self.meta.path).parse()?;
-        let doc = self.explorer.get_html(path).await?;
+        let doc = self.client.get_html(path).await?;
         self.comments = parser::comments(&doc)?;
 
         Ok(())
