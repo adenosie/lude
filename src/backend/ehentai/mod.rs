@@ -7,7 +7,6 @@ mod page;
 mod article;
 mod parser;
 mod explorer;
-mod cookie;
 
 pub use tag::{ParseTagError, TagKind, Tag, TagMap, ArticleKind};
 pub use article::{Draft, Comment, Article};

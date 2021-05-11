@@ -3,7 +3,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use std::str;
-use std::fmt;
 use std::sync::Arc;
 use std::error::Error;
 
@@ -12,7 +11,6 @@ use hyper::client::connect::HttpConnector;
 use detour::HttpsConnector;
 use select::document::Document;
 
-use super::cookie::CookieStore;
 use super::article::Article;
 use super::page::Page;
 
@@ -40,7 +38,7 @@ fn percent_encode(from: &str) -> String {
 
 pub struct Explorer {
     client: Client,
-    cookies: CookieStore,
+    cookie: String,
 }
 
 impl Explorer {
@@ -49,12 +47,9 @@ impl Explorer {
         let client = hyper::Client::builder()
             .build::<_, Body>(https);
 
-        let mut cookies = CookieStore::new();
-        cookies.set("nw=1");
-
         Self {
             client,
-            cookies,
+            cookie: String::new(),
         }
     }
 
@@ -62,61 +57,29 @@ impl Explorer {
         Arc::new(Explorer::owned())
     }
 
-    pub async fn login(username: &str, password: &str)
-        -> Result<Arc<Explorer>, ErrorBox> {
-        unimplemented!()
-
-        // let mut _self = Explorer::owned();
-
-        // const ORIGIN: &str = "https://forums.e-hentai.org";
-        // const REFERER: &str = "https://forums.e-hentai.org/index.php?act=Login&CODE=00";
-        // const POST_DEST: &str = "https://forums.e-hentai.org/index.php?act=Login&CODE=01";
-
-        // let form = format!(
-        //     "CookieDate=1&UserName={}&PassWord={}&submit=Log%20me%20in",
-        //     percent_encode(username),
-        //     percent_encode(password)
-        // );
-
-        // let req = Request::post(POST_DEST)
-        //     .header("Connection", "keep-alive")
-        //     .header("Referer", REFERER)
-        //     .header("Content-Type", "application/x-www-form-urlencoded")
-        //     .header("Content-Length", form.len())
-        //     .body(form.into())?;
-
-        // let res = _self.client.request(req).await?;
-        // res.headers()
-        //     .get_all("Set-Cookie")
-        //     .iter()
-        //     .map(|val| val.to_str().unwrap())
-        //     .for_each(|s| _self.cookies.set(s));
-
-        // if _self.cookies.get("ipb_pass_hash").is_none() {
-        //     panic!("login failed!");
-        // }
-
-        // Ok(Arc::new(_self))
-    }
-
     pub async fn with_cookies(member_id: &str, pass_hash: &str)
         -> Arc<Explorer> {
         let mut _self = Explorer::owned();
-        _self.cookies.set(&format!("ipb_member_id={}", member_id));
-        _self.cookies.set(&format!("ipb_pass_hash={}", pass_hash));
+        _self.cookie = format!(
+            "ipb_member_id={}; ipb_pass_hash={}",
+            member_id, pass_hash
+        );
 
         Arc::new(_self)
     }
 
     async fn get(&self, dest: Uri, mime: &str)
         -> Result<Response<Body>, ErrorBox> {
-        let cookie = self.cookies
-            .bake(dest.host().unwrap());
-
-        let req = Request::get(dest)
-            .header("Content-Type", mime)
-            .header("Cookie", cookie)
-            .body(Body::empty())?;
+        let req = if dest.host() == Some("e-hentai.org") {
+            Request::get(dest)
+                .header("Content-Type", mime)
+                .header("Cookie", self.cookie.as_str())
+                .body(Body::empty())?
+        } else {
+            Request::get(dest)
+                .header("Content-Type", mime)
+                .body(Body::empty())?
+        };
 
         let res = self.client.request(req).await?;
         Ok(res)
