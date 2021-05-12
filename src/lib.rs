@@ -7,6 +7,6 @@ extern crate hyper;
 extern crate select;
 extern crate detour;
 
-mod backend;
+mod ehentai;
 
-pub use backend::{ehentai};
+pub use ehentai;

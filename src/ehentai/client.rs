@@ -12,7 +12,7 @@ type Connector = HttpsConnector<HttpConnector>;
 
 pub struct Client {
     inner: hyper::Client<Connector, Body>,
-    cookie: String,
+    cookie: Option<String>,
 }
 
 impl Client {
@@ -23,38 +23,31 @@ impl Client {
 
         Self {
             inner,
-            cookie: String::new(),
+            cookie: None,
         }
     }
 
-    pub fn with_cookies(member_id: &str, pass_hash: &str)
-        -> Self {
-        let https = HttpsConnector::new();
-        let inner = hyper::Client::builder()
-            .build::<_, Body>(https);
-
-        let cookie = format!(
+    pub fn set_cookies(&mut self, member_id: &str, pass_hash: &str) {
+        self.cookie = Some(format!(
             "ipb_member_id={}; ipb_pass_hash={}",
             member_id, pass_hash
-        );
-
-        Self {
-            inner,
-            cookie,
-        }
+        ));
     }
 
     async fn get(&self, dest: Uri, mime: &str)
         -> Result<Response<Body>, ErrorBox> {
-        let req = if dest.host() == Some("e-hentai.org") {
+        let req = if dest.host() != Some("e-hentai.org") || self.cookie.is_none() {
             Request::get(dest)
                 .header("Content-Type", mime)
-                .header("Cookie", self.cookie.as_str())
+                .body(Body::empty())?
+        } else if let Some(cookie) = self.cookie.as_ref() {
+            Request::get(dest)
+                .header("Content-Type", mime)
+                .header("Cookie", cookie.as_str())
                 .body(Body::empty())?
         } else {
-            Request::get(dest)
-                .header("Content-Type", mime)
-                .body(Body::empty())?
+            // logically impossible
+            unreachable!()
         };
 
         let res = self.inner.request(req).await?;

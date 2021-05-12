@@ -12,25 +12,7 @@ use super::page::Page;
 
 type ErrorBox = Box<dyn Error>;
 
-fn percent_encode(from: &str) -> String {
-    let mut res = String::new();
-
-    for byte in from.as_bytes() {
-        match byte {
-            // unreserved characters (MUST NOT be encoded)
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' 
-                | b'-' | b'_' | b'.' | b'~' => {
-                res.push(*byte as char);
-            },
-            _ => {
-                res.push_str(&format!("%{:02X}", *byte));
-            }
-        }
-    }
-
-    res
-}
-
+#[derive(Clone)]
 pub struct Explorer {
     client: Arc<Client>,
 }
@@ -44,8 +26,17 @@ impl Explorer {
         }
     }
 
+    pub fn with_cookies(member_id: &str, pass_hash: &str) -> Self {
+        let mut client = Client::new();
+        client.set_cookies(member_id, pass_hash);
+
+        Self {
+            client: Arc::new(client),
+        }
+    }
+
     pub fn search(&self, keyword: &str) -> Page {
-        Page::new(self.client.clone(), 0, &percent_encode(keyword))
+        Page::new(self.client.clone(), 0, keyword)
     }
 
     pub async fn article_from_path(&self, path: String)
