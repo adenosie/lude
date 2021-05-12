@@ -15,7 +15,7 @@ This project is in very early stage; More awesome features will come soon. Keep 
 
 ## Examples
 
-from [`here`](src/backend/ehentai/tests.rs):
+from [`here`](src/ehentai/tests.rs):
 
 ```rust
 use tokio::time::{sleep, Duration};
@@ -25,13 +25,12 @@ use std::fs;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
-use lude::backend::ehentai::{Explorer, Article};
+use lude::ehentai::{Explorer, Article};
 
 async fn parallel() {
     // load article infos 
     let url = String::from("https://e-hentai.org/g/1335995/ba04527f3d/");
-
-    let explorer = Explorer::new().await.unwrap();
+    let explorer = Explorer::new();
 
     let mut article = explorer.article_from_path(url).await.unwrap();
     article.load_image_list().await.unwrap();
@@ -43,7 +42,6 @@ async fn parallel() {
     let article = Arc::new(article);
 
     for i in 0..len {
-        // don't ban me!
         sleep(Duration::from_millis(100)).await;
 
         let tx = tx.clone();
@@ -79,6 +77,7 @@ async fn parallel() {
         file.write_all(&image).unwrap();
     }
 }
+
 ```
 
 ## License

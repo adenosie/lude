@@ -7,6 +7,4 @@ extern crate hyper;
 extern crate select;
 extern crate detour;
 
-mod ehentai;
-
-pub use ehentai;
+pub mod ehentai;
