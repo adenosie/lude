@@ -40,6 +40,10 @@ impl Draft {
         &self.meta
     }
 
+    pub async fn load_thumb(&self) -> Result<Vec<u8>, ErrorBox> {
+        self.client.get_image(self.meta.thumb.parse()?).await
+    }
+
     pub async fn load(self) -> Result<Article, ErrorBox> {
         Article::new(self.client, self.meta.path).await
     }
@@ -130,6 +134,10 @@ impl Article {
     // it's O(1) to random access
     pub fn comments(&self) -> slice::Iter<'_, Comment> {
         self.comments.iter()
+    }
+
+    pub async fn load_thumb(&self) -> Result<Vec<u8>, ErrorBox> {
+        self.client.get_image(self.meta.thumb.parse()?).await
     }
 
     pub async fn load_image_list(&mut self) -> Result<(), ErrorBox> {

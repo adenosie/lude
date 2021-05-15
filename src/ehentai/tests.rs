@@ -24,9 +24,9 @@ async fn light() {
     let explorer = Explorer::new();
     let article = explorer.article_from_path(URL.into()).await.unwrap();
     
-    let first = article.load_image(0).await.unwrap();
+    let thumb = article.load_thumb().await.unwrap();
     let mut file = File::create("./tests/light.jpg").unwrap();
-    file.write_all(&first).unwrap();
+    file.write_all(&thumb).unwrap();
 }
 
 #[tokio::test]
